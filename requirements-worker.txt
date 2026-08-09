@@ -1,0 +1,7 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
+asyncpg==0.31.0
+httpx==0.28.1
+qdrant-client==1.13.3
+redis[hiredis]==8.1.0
+sentence-transformers==5.7.0

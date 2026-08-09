@@ -1,0 +1,9 @@
+/.git/
+/.github/
+/.next/cache/
+/.pytest_cache/
+/tests/
+**/__pycache__/
+**/*.pyc
+/.env
+/.env.*

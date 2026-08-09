@@ -1,0 +1,172 @@
+# yaml-language-server: $schema=https://api.app-prg1.zerops.io/api/rest/public/settings/zerops-yml-json-schema.json
+
+zerops:
+  - setup: dashboard
+    build:
+      base: ubuntu/nodejs@22
+      buildCommands:
+        - npm ci
+        - npm run build
+      deployFiles:
+        - .next
+        - node_modules
+        - package.json
+        - public
+      cache:
+        - node_modules
+        - .next/cache
+    deploy:
+      temporaryShutdown: false
+      readinessCheck:
+        httpGet:
+          port: 3000
+          path: /api/health
+        failureTimeout: 180
+        retryPeriod: 5
+    run:
+      base: ubuntu/nodejs@22
+      ports:
+        - port: 3000
+          httpSupport: true
+      envVariables:
+        API_INTERNAL_URL: http://api:8000
+        DRIFTGUARD_DASHBOARD_USERNAME: driftguard
+      start: npm run start
+      healthCheck:
+        httpGet:
+          port: 3000
+          path: /api/live
+        failureTimeout: 60
+        disconnectTimeout: 15
+        recoveryTimeout: 10
+        execPeriod: 10
+
+  - setup: api
+    build:
+      base: ubuntu/python@3.12
+      deployFiles:
+        - app_api
+        - common_utils
+        - migrations
+        - alembic.ini
+        - requirements-api.txt
+        - requirements-migrations.txt
+      addToRunPrepare:
+        - requirements-api.txt
+        - requirements-migrations.txt
+      cache:
+        - /root/.cache/pip
+    deploy:
+      temporaryShutdown: false
+      readinessCheck:
+        httpGet:
+          port: 8000
+          path: /status
+        failureTimeout: 180
+        retryPeriod: 5
+    run:
+      base: ubuntu/python@3.12
+      prepareCommands:
+        - pip install --disable-pip-version-check -r requirements-api.txt -r requirements-migrations.txt
+      ports:
+        - port: 8000
+          httpSupport: true
+      envVariables:
+        DB_HOST: ${db_hostname}
+        DB_PORT: ${db_port}
+        DB_NAME: ${db_dbName}
+        DB_USER: ${db_user}
+        VALKEY_HOST: ${cache_hostname}
+        VALKEY_PORT: ${cache_port}
+        QDRANT_HOST: ${qdrant_hostname}
+        QDRANT_PORT: ${qdrant_port}
+        DRIFT_QUEUE_NAME: drift_eval_queue
+        QDRANT_COLLECTION: drift_baselines
+        STARTUP_MAX_ATTEMPTS: 5
+        STARTUP_BACKOFF_SECONDS: 2
+        MAX_REQUEST_BYTES: 262144
+        INGEST_RATE_LIMIT_REQUESTS: 1000
+        INGEST_RATE_LIMIT_WINDOW_SECONDS: 1
+        RATE_LIMIT_FAIL_OPEN: "true"
+        WEBHOOK_ALLOWED_HOSTS: ""
+      start: alembic upgrade head && python -m app_api.project_keys ensure --name "Zerops Dashboard" --api-key-env DRIFTGUARD_BOOTSTRAP_PROJECT_KEY && exec uvicorn app_api.main:app --host 0.0.0.0 --port 8000
+      healthCheck:
+        httpGet:
+          port: 8000
+          path: /healthz
+        failureTimeout: 60
+        disconnectTimeout: 15
+        recoveryTimeout: 10
+        execPeriod: 10
+
+  - setup: worker
+    build:
+      base: ubuntu/python@3.12
+      envVariables:
+        EMBEDDING_MODEL_SOURCE: sentence-transformers/all-MiniLM-L6-v2
+        EMBEDDING_MODEL_REVISION: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+        EMBEDDING_MODEL_PATH: models/all-MiniLM-L6-v2
+      buildCommands:
+        - pip install --disable-pip-version-check -r requirements-worker.txt
+        - python -m app_worker.preload_model
+      deployFiles:
+        - app_worker
+        - common_utils
+        - models
+        - requirements-worker.txt
+      addToRunPrepare:
+        - requirements-worker.txt
+      cache:
+        - /root/.cache/pip
+        - /root/.cache/huggingface
+    deploy:
+      temporaryShutdown: false
+      readinessCheck:
+        exec:
+          command: python -c "import os,sys,time; p='/tmp/driftguard-worker-ready'; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p) <= 20 else 1)"
+        failureTimeout: 300
+        retryPeriod: 5
+    run:
+      base: ubuntu/python@3.12
+      prepareCommands:
+        - pip install --disable-pip-version-check -r requirements-worker.txt
+      envVariables:
+        DB_HOST: ${db_hostname}
+        DB_PORT: ${db_port}
+        DB_NAME: ${db_dbName}
+        DB_USER: ${db_user}
+        VALKEY_HOST: ${cache_hostname}
+        VALKEY_PORT: ${cache_port}
+        QDRANT_HOST: ${qdrant_hostname}
+        QDRANT_PORT: ${qdrant_port}
+        DRIFT_QUEUE_NAME: drift_eval_queue
+        QDRANT_COLLECTION: drift_baselines
+        EMBEDDING_MODEL: models/all-MiniLM-L6-v2
+        EMBEDDING_MODEL_REVISION: 1110a243fdf4706b3f48f1d95db1a4f5529b4d41
+        EMBEDDING_DIMENSION: 384
+        EMBEDDING_CACHE_TTL_SECONDS: 3600
+        BASELINE_CACHE_TTL_SECONDS: 86400
+        MAX_TEXT_CHARACTERS: 2048
+        WORKER_CONCURRENCY: 4
+        DB_POOL_MAX_SIZE: 5
+        WORKER_HEARTBEAT_INTERVAL_SECONDS: 5
+        WORKER_HEARTBEAT_TTL_SECONDS: 15
+        WORKER_JOB_HEALTH_TIMEOUT_SECONDS: 60
+        WORKER_MAX_JOB_ATTEMPTS: 3
+        DELIVERY_POLL_INTERVAL_SECONDS: 1
+        DELIVERY_BATCH_SIZE: 100
+        DELIVERY_LEASE_SECONDS: 60
+        DELIVERY_MAX_ATTEMPTS: 5
+        DELIVERY_RECEIPT_TTL_SECONDS: 86400
+        QDRANT_CIRCUIT_FAILURE_THRESHOLD: 3
+        QDRANT_CIRCUIT_RESET_SECONDS: 30
+        WEBHOOK_ALLOWED_HOSTS: ""
+        SMTP_PORT: 587
+        SMTP_SECURITY: starttls
+        SMTP_TIMEOUT_SECONDS: 10
+      start: exec python -m app_worker.main
+      healthCheck:
+        exec:
+          command: python -c "import os,sys,time; p='/tmp/driftguard-worker-ready'; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p) <= 20 else 1)"
+        failureTimeout: 60
+        execPeriod: 10

@@ -1,0 +1,88 @@
+#yamlPreprocessor=on
+# yaml-language-server: $schema=https://api.app-prg1.zerops.io/api/rest/public/settings/import-project-yml-json-schema.json
+
+project:
+  name: driftguard
+  description: Production LLM-output semantic drift and reliability monitoring
+  corePackage: SERIOUS
+  envIsolation: service
+
+services:
+  - hostname: db
+    type: postgresql:ha@16
+    priority: 100
+    enableSubdomainAccess: false
+
+  - hostname: cache
+    type: valkey:single@7.2
+    priority: 100
+    enableSubdomainAccess: false
+
+  - hostname: qdrant
+    type: qdrant:single@1.12
+    priority: 100
+    enableSubdomainAccess: false
+
+  - hostname: dashboard
+    type: ubuntu/nodejs@22
+    zeropsSetup: dashboard
+    priority: 20
+    enableSubdomainAccess: true
+    envSecrets:
+      DRIFTGUARD_DASHBOARD_API_KEY: ${api_DRIFTGUARD_BOOTSTRAP_PROJECT_KEY}
+      DRIFTGUARD_DASHBOARD_PASSWORD: <@generateRandomString(<32>)>
+      DRIFTGUARD_ADMIN_TOKEN: ${api_DRIFTGUARD_ADMIN_TOKEN}
+    minContainers: 2
+    maxContainers: 4
+    verticalAutoscaling:
+      minCpu: 1
+      maxCpu: 2
+      cpuMode: SHARED
+      minRam: 0.5
+      maxRam: 2
+      minDisk: 1
+      maxDisk: 5
+
+  - hostname: api
+    type: ubuntu/python@3.12
+    zeropsSetup: api
+    priority: 20
+    enableSubdomainAccess: true
+    minContainers: 2
+    maxContainers: 6
+    verticalAutoscaling:
+      minCpu: 1
+      maxCpu: 4
+      cpuMode: SHARED
+      minRam: 0.5
+      maxRam: 4
+      minDisk: 1
+      maxDisk: 5
+    envSecrets:
+      DATABASE_URL: ${db_connectionString}
+      DB_PASSWORD: ${db_password}
+      VALKEY_PASSWORD: ${cache_password}
+      QDRANT_API_KEY: ${qdrant_readOnlyApiKey}
+      DRIFTGUARD_ADMIN_TOKEN: <@generateRandomString(<64>)>
+      DRIFTGUARD_BOOTSTRAP_PROJECT_KEY: <@generateRandomString(<64>)>
+
+  - hostname: worker
+    type: ubuntu/python@3.12
+    zeropsSetup: worker
+    priority: 20
+    enableSubdomainAccess: false
+    minContainers: 2
+    maxContainers: 10
+    verticalAutoscaling:
+      minCpu: 1
+      maxCpu: 4
+      cpuMode: SHARED
+      minRam: 2
+      maxRam: 6
+      minDisk: 10
+      maxDisk: 20
+    envSecrets:
+      DATABASE_URL: ${db_connectionString}
+      DB_PASSWORD: ${db_password}
+      VALKEY_PASSWORD: ${cache_password}
+      QDRANT_API_KEY: ${qdrant_apiKey}
