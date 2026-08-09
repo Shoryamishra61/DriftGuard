@@ -24,6 +24,9 @@ def test_dashboard_and_ingestion_routes_have_frozen_http_contracts() -> None:
     assert paths["/api/v1/retention/legal-holds/{hold_id}"]["delete"][
         "responses"
     ].keys() >= {"204"}
+    assert paths["/api/v1/retention/load-test-data"]["delete"]["responses"].keys() >= {
+        "200"
+    }
 
     protected_operations = [
         paths["/api/v1/logs"]["post"],
@@ -38,6 +41,7 @@ def test_dashboard_and_ingestion_routes_have_frozen_http_contracts() -> None:
         paths["/api/v1/retention/legal-holds"]["get"],
         paths["/api/v1/retention/legal-holds"]["post"],
         paths["/api/v1/retention/legal-holds/{hold_id}"]["delete"],
+        paths["/api/v1/retention/load-test-data"]["delete"],
     ]
     assert all(
         operation["security"] == [{"APIKeyHeader": []}]
