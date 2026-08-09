@@ -13,6 +13,16 @@
 
 The dashboard is intentionally authenticated because it exposes production prompts, outputs, baselines, incidents, and routing controls. Demo credentials belong in the private challenge submission, never in this repository.
 
+### Judge access
+
+Use these fields in the private challenge submission:
+
+- URL: `https://dashboard-141-3000.sea1.zerops.app`
+- Username: `driftguard`
+- Password: copy the current `DRIFTGUARD_DASHBOARD_PASSWORD` secret from the Zerops `dashboard` service.
+
+Do **not** place the password in this public README, an issue, a social post, or a screenshot. Rotate it after judging if it was shared outside the private submission form.
+
 ## Abstract
 
 Production LLM endpoints can continue returning successful HTTP responses while the meaning and reliability of their answers deteriorate. DriftGuard turns that silent failure mode into an observable operational signal. It accepts authenticated telemetry, commits each run and queue event atomically, computes a pinned 384-dimensional embedding asynchronously, compares it with a versioned tenant baseline in Qdrant, and routes threshold breaches through durable `NOTIFY`, daily `DIGEST`, or `MUTE` policies.
@@ -73,6 +83,19 @@ Internal services use Zerops private hostnames such as `http://api:8000` and `ht
 
 Startup connections use an initial attempt plus five exponential retries at 2, 4, 8, 16, and 32 seconds. Qdrant calls use a concurrency-safe closed/open/half-open circuit breaker. Readiness verifies migrations, credentials, dependencies, the pinned model, vector dimension, and worker heartbeat.
 
+## Retention and legal holds
+
+Retention runs automatically on the worker tier under a cluster-wide PostgreSQL advisory lock:
+
+- prompt, output, and raw metadata are redacted after 30 days;
+- completed or failed telemetry, evaluations, and alerts expire after 90 days;
+- delivered transactional-outbox records expire after seven days;
+- active project/date legal holds prevent redaction and deletion;
+- relational expiry writes a durable vector-deletion outbox before PostgreSQL cascades;
+- Qdrant deletion is idempotent, retried with bounded backoff, and acknowledged only after success.
+
+Operations are limited to 5,000 records per batch and ten batches per 60-second cycle. Legal holds are administered through authenticated `POST`, `GET`, and `DELETE /api/v1/retention/legal-holds` endpoints. The existing UUID/FK schema is intentionally not retrofitted into unsafe time partitions; a 500-RPS tier requires a separately migrated composite-key partition design after capacity acceptance.
+
 ## Semantic evaluation
 
 - Encoder: `sentence-transformers/all-MiniLM-L6-v2`
@@ -114,7 +137,7 @@ Verified on 9 August 2026 against the deployed Zerops project:
 | Python verification | 189 tests passed; 4 real-PostgreSQL tests opt in locally |
 | Frontend verification | ESLint and optimized Next.js production build passed |
 
-The project does **not** claim the original stretch target of sub-5 ms public HTTP admission or sustained 500 requests per second. Those claims require a controlled load test on the final Zerops sizes. The technical report separates measured results from unverified capacity targets.
+The final Zerops deployment was offered 500 requests/second for 60 seconds. It accepted 24,209 of 30,000 requests and completed at 115.259 requests/second; application p95 was 906.720 ms. Therefore the 500-RPS and sub-5 ms targets are explicitly **not met**. See [the load-test report](docs/LOAD_TEST_REPORT.md) for the complete method, percentiles, failure distribution, and recovery evidence.
 
 ## Deploy on Zerops
 

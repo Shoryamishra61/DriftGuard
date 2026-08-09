@@ -6,7 +6,7 @@
 
 ## Abstract
 
-Large language model applications can degrade semantically without producing transport-level failures. This report presents DriftGuard, a deployed monitoring system that compares production outputs with project-specific reference answers and converts semantic distance into auditable operational policy. The design combines a transactionally reliable ingestion path, asynchronous embedding, tenant-filtered cosine search, horizontally safe evaluation, durable alert delivery, and live dependency diagnostics. The implementation runs as six services on Zerops: a Next.js dashboard, FastAPI API, Python worker tier, PostgreSQL, Valkey, and Qdrant. Verification covers unit, contract, security, database-integration, build, and live deployment behavior. Results are reported conservatively: the deployed application is reachable and healthy, while sustained 500-request-per-second throughput and sub-5 ms public admission remain unverified capacity targets rather than claimed outcomes.
+Large language model applications can degrade semantically without producing transport-level failures. This report presents DriftGuard, a deployed monitoring system that compares production outputs with project-specific reference answers and converts semantic distance into auditable operational policy. The design combines a transactionally reliable ingestion path, asynchronous embedding, tenant-filtered cosine search, horizontally safe evaluation, durable alert delivery, and live dependency diagnostics. The implementation runs as six services on Zerops: a Next.js dashboard, FastAPI API, Python worker tier, PostgreSQL, Valkey, and Qdrant. Verification covers unit, contract, security, database-integration, build, live deployment, and bounded load behavior. Results are reported conservatively: the application is reachable and healthy, while the measured 500-request-per-second and sub-5 ms acceptance targets failed and are not claimed.
 
 ## 1. Problem statement
 
@@ -102,24 +102,24 @@ The deployed project reported all six services `ACTIVE`. The public dashboard li
 
 Both starting workers completed the idempotent bootstrap of the same 50-record `competition-v1` baseline. A public telemetry request then returned `202 Accepted`; the worker matched baseline `5612423b-4cfc-5e0b-8d72-00803e9f79a5`, calculated cosine distance `0.75923121`, and persisted the deliberate MUTE outcome as incident status `SNOOZED` and route status `SUPPRESSED`. Qdrant reported 52 points—the 50 baselines, one manifest, and one evaluation—and Valkey queue depth returned to zero.
 
-### 7.3 Latency interpretation
+### 7.3 Load and latency acceptance
 
-A previous bounded local end-to-end exercise measured 54.491 ms to `202 Accepted`, 173.153 ms from ingestion to stored evaluation, and 75 ms worker compute time. This does not satisfy the aspirational sub-5 ms public-ingestion target and does not establish sustained throughput. Reporting the result prevents a local smoke test from being misrepresented as a production benchmark.
+The final public Zerops API was offered 500 authenticated requests per second for 60 seconds. Of 30,000 attempted requests, 24,209 returned `202`, 7 returned `502`, and 5,784 ended in client/remote protocol errors. Effective completed throughput was 115.259 requests per second. Public wall p95 was 3,742.807 ms and application `Server-Timing` p95 was 906.720 ms. The 500-RPS and sub-5 ms requirements therefore failed. The full method and recovery evidence are preserved in `docs/LOAD_TEST_REPORT.md`.
 
 ## 8. Capacity and retention
 
 At 500 telemetry records per second, arrival volume is 43.2 million runs per day before evaluations, alerts, outbox history, indexes, and vectors. The challenge deployment is intentionally a bounded demonstration, not a certified 500-per-second data-retention tier.
 
-The proposed production policy is:
+The implemented online-retention policy is:
 
-- raw prompt/output telemetry: 30 days online;
-- evaluation aggregates and alert evidence: 90 days online;
-- delivered outbox rows: 7 days;
-- immutable baseline versions: retain while referenced, then archive;
-- legal holds: override deletion by project and date range;
-- archive: encrypted object storage with tested restore sampling.
+- raw prompt/output telemetry: redacted after 30 days;
+- completed/failed telemetry, evaluations, and alert evidence: deleted after 90 days;
+- delivered outbox rows and completed vector-deletion receipts: deleted after 7 days;
+- immutable baseline versions: retained while explicitly active or versioned;
+- legal holds: active project/date ranges override redaction and deletion;
+- cross-store deletion: PostgreSQL commits a Qdrant deletion outbox before relational cascade.
 
-This policy requires time-based PostgreSQL partitioning and coordinated Qdrant evaluation-point expiry before high-volume launch. It is documented as an approval boundary because silently adding destructive deletion would be less responsible than retaining data in a challenge-scale deployment.
+The worker enforces this policy every 60 seconds under a cluster-wide advisory lock, in at most ten 5,000-row batches per operation. Migration `20260809_0006` adds legal holds, retention indexes, and the durable vector-deletion outbox. Retrofitting range partitions into the current UUID primary-key/FK graph would require changing every referencing key because PostgreSQL partitioned uniqueness must include the partition key. That unsafe online rewrite is rejected for the challenge deployment. A separately migrated composite `(id, ingested_at)` design remains mandatory before any future 500-RPS approval.
 
 The complete-day digest algorithm also requires load proof at multi-million-alert scale. A materialized digest rollup/outbox is the recommended next design if a full-day claim cannot commit within the lease.
 
@@ -131,8 +131,8 @@ Transitive Python artifacts are not hash-locked. This is a documented supply-cha
 
 ## 10. Limitations and future work
 
-- Run a sustained Zerops load test with queue-delay and dependency-saturation telemetry.
-- Implement approved partition, archive, legal-hold, and restore automation.
+- Re-architect and repeat the failed 500-RPS acceptance test on dedicated capacity.
+- Design the separately migrated composite-key partition/archive tier before high-volume launch.
 - Replace whole-day digest row claims with a materialized rollup for extreme anomaly volume.
 - Exercise an authorized Slack/Discord/PagerDuty target and an SMTP digest before operational launch.
 - Add browser-level dashboard security and accessibility tests to CI.

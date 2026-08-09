@@ -42,7 +42,7 @@ DriftGuard detects semantic degradation in production LLM answers and routes rel
 <https://dashboard-141-3000.sea1.zerops.app>
 
 **Demo access**  
-Provide the dashboard Basic-auth username and password privately in the challenge form. Never publish the password in a post, video, issue, or repository.
+Username: `driftguard`. Copy the current `DRIFTGUARD_DASHBOARD_PASSWORD` secret from the Zerops `dashboard` service into the private challenge form. Never publish the password in a post, video, issue, or repository.
 
 **How Zerops is used**  
 Zerops builds and runs the Next.js dashboard, FastAPI ingestion API, and horizontally scaled Python workers. PostgreSQL 16 HA provides authoritative state and a transactional outbox; Valkey provides the private task queue, rate limits, caches, receipts, and heartbeat; Qdrant provides tenant-filtered vector search. Zerops private DNS carries internal traffic, generated secret references wire credentials, readiness gates prevent partial rollouts, and public subdomains expose only the dashboard and API.
@@ -65,9 +65,11 @@ OpenAI Codex assisted with implementation, debugging, tests, security review, de
 
 These are not challenge eligibility requirements and must not be misrepresented as completed production-scale certification:
 
-- [ ] Sustained 500 requests/second on final Zerops service sizes.
-- [ ] Sub-5 ms public `202` admission latency.
-- [ ] Approved and implemented partition/archive/legal-hold policy.
+- [x] Bounded 500 requests/second test executed and published honestly (target failed).
+- [ ] Sustained 500 requests/second accepted without errors on final Zerops sizes.
+- [ ] Sub-5 ms public or application `202` admission latency (measured target failed).
+- [x] Automated 30/90/7-day retention and project/date legal holds implemented.
+- [ ] Composite-key time partition/archive tier required before 500-RPS approval.
 - [ ] Multi-million-alert daily digest lease proof or materialized rollup.
 - [ ] Authorized live NOTIFY provider and SMTP DIGEST delivery tests.
 
