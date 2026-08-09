@@ -94,7 +94,7 @@ Verification uses four layers:
 
 ### 7.1 Automated verification
 
-The settled pre-deployment tree produced 188 passing default Python tests and four opt-in PostgreSQL tests. Ruff, compilation, ESLint, TypeScript, and the optimized dashboard build passed. The Node dependency audit reported zero vulnerabilities. CI now provisions PostgreSQL 16 so the real-database tests run on every push and pull request.
+The final tree produced 189 passing default Python tests. GitHub CI provisions PostgreSQL 16 and passes all 193 tests, including the four real-database integrations. Ruff, compilation, ESLint, TypeScript, and the optimized dashboard build passed. The Node dependency audit reported zero vulnerabilities.
 
 ### 7.2 Live Zerops verification
 
