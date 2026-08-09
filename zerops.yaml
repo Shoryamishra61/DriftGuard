@@ -21,8 +21,8 @@ zerops:
         httpGet:
           port: 3000
           path: /api/health
-        failureTimeout: 180
-        retryPeriod: 5
+        failureTimeout: 180s
+        retryPeriod: 5s
     run:
       base: ubuntu/nodejs@22
       ports:
@@ -36,10 +36,10 @@ zerops:
         httpGet:
           port: 3000
           path: /api/live
-        failureTimeout: 60
-        disconnectTimeout: 15
-        recoveryTimeout: 10
-        execPeriod: 10
+        failureTimeout: 60s
+        disconnectTimeout: 15s
+        recoveryTimeout: 10s
+        execPeriod: 10s
 
   - setup: api
     build:
@@ -62,8 +62,8 @@ zerops:
         httpGet:
           port: 8000
           path: /status
-        failureTimeout: 180
-        retryPeriod: 5
+        failureTimeout: 180s
+        retryPeriod: 5s
     run:
       base: ubuntu/python@3.12
       prepareCommands:
@@ -94,10 +94,10 @@ zerops:
         httpGet:
           port: 8000
           path: /healthz
-        failureTimeout: 60
-        disconnectTimeout: 15
-        recoveryTimeout: 10
-        execPeriod: 10
+        failureTimeout: 60s
+        disconnectTimeout: 15s
+        recoveryTimeout: 10s
+        execPeriod: 10s
 
   - setup: worker
     build:
@@ -124,8 +124,8 @@ zerops:
       readinessCheck:
         exec:
           command: python -c "import os,sys,time; p='/tmp/driftguard-worker-ready'; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p) <= 20 else 1)"
-        failureTimeout: 300
-        retryPeriod: 5
+        failureTimeout: 300s
+        retryPeriod: 5s
     run:
       base: ubuntu/python@3.12
       prepareCommands:
@@ -168,5 +168,5 @@ zerops:
       healthCheck:
         exec:
           command: python -c "import os,sys,time; p='/tmp/driftguard-worker-ready'; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p) <= 20 else 1)"
-        failureTimeout: 60
-        execPeriod: 10
+        failureTimeout: 60s
+        execPeriod: 10s
