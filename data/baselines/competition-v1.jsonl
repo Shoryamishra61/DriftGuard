@@ -1,0 +1,50 @@
+{"text":"I can help investigate this production issue. Please share the request identifier, deployment version, and the time window in UTC."}
+{"text":"The service is healthy and accepting requests. No elevated error rate is visible in the selected monitoring window."}
+{"text":"The request was accepted for asynchronous processing. Track completion using the returned run identifier."}
+{"text":"I cannot verify that claim from the available evidence. Please provide a primary source or mark the answer as uncertain."}
+{"text":"The deployment completed successfully and all readiness checks are passing."}
+{"text":"The deployment was rolled back because the new containers did not become ready before the configured deadline."}
+{"text":"PostgreSQL connectivity is healthy, and the application connection pool has available capacity."}
+{"text":"The cache is reachable and the background queue currently has no pending work."}
+{"text":"The vector database is reachable and responding within the expected latency range."}
+{"text":"The worker is online, the embedding model is loaded, and the last heartbeat is current."}
+{"text":"This operation requires administrator authorization and cannot be completed with an ingestion-only credential."}
+{"text":"The supplied API key is invalid or no longer active. Rotate the key and retry without logging the plaintext value."}
+{"text":"The request exceeds the configured size limit. Reduce the metadata or text payload before retrying."}
+{"text":"The telemetry rate limit was exceeded for this project. Retry after the indicated window."}
+{"text":"No matching baseline is active for this project. Seed and activate a versioned baseline set before interpreting drift scores."}
+{"text":"The output is semantically close to the approved baseline and remains below the configured alert threshold."}
+{"text":"The output differs materially from the approved baseline and triggered the configured drift policy."}
+{"text":"The notification was delivered successfully and the delivery timestamp was recorded after the provider acknowledged it."}
+{"text":"Notification delivery failed after bounded retries. The alert remains auditable and can be retried after correcting the destination."}
+{"text":"This alert is muted by policy. The incident is recorded for audit purposes, but no external notification will be sent."}
+{"text":"This alert is scheduled for the next consolidated digest window rather than immediate delivery."}
+{"text":"The requested webhook destination is not allowed because it resolves to a private, local, multicast, or otherwise non-public address."}
+{"text":"The webhook was rejected because redirects are disabled for notification delivery."}
+{"text":"The active baseline version is immutable. Publish changed reference answers under a new baseline-set name."}
+{"text":"The baseline import is idempotent because its content hash matches the existing manifest."}
+{"text":"The evaluation is tenant-isolated and searches only baseline vectors owned by the authenticated project."}
+{"text":"Raw embedding vectors are not returned to the browser. The dashboard receives only a bounded two-dimensional projection."}
+{"text":"The transactional outbox guarantees that telemetry and its queue event are committed together before publication."}
+{"text":"A duplicate queue delivery is safe because evaluation persistence is idempotent and processing ownership is fenced per run."}
+{"text":"The vector dependency circuit breaker is open, so processing is paused briefly instead of repeatedly overloading the unavailable service."}
+{"text":"The dependency recovered, the half-open probe succeeded, and normal vector processing has resumed."}
+{"text":"The dashboard is available, but one dependency is degraded. Review Infrastructure Pulse for the affected service and measured latency."}
+{"text":"The public dashboard uses TLS at Zerops ingress while service-to-service traffic stays on the private Zerops network."}
+{"text":"Database, cache, and vector-store ports are private and are not published through a Zerops subdomain."}
+{"text":"Secrets are injected at runtime and can be rotated without embedding credentials in source control."}
+{"text":"The model artifact is pinned to an immutable revision and validated as a 384-dimensional encoder during the build."}
+{"text":"The evaluation completed successfully, including embedding, nearest-neighbor search, persistence, and alert-policy evaluation."}
+{"text":"The run failed terminally after bounded retries, and privacy-preserving failure metadata was written to the dead-letter queue."}
+{"text":"Recovery should reset the authoritative PostgreSQL outbox state rather than constructing an untracked queue message."}
+{"text":"The requested time window contains no completed evaluations, so no drift trend can be calculated yet."}
+{"text":"The reported percentile is calculated by the API from completed evaluations in the selected time window."}
+{"text":"Search results are scoped to the authenticated project and ordered by evaluation time."}
+{"text":"The alert rule was created successfully and will apply only to future evaluations for this project."}
+{"text":"The alert rule was disabled, and any undelivered route was suppressed without claiming a successful notification."}
+{"text":"The queue is draining normally and worker throughput currently exceeds the incoming telemetry rate."}
+{"text":"The queue is growing, which indicates sustained backpressure or insufficient worker capacity."}
+{"text":"The health endpoint confirms process liveness; readiness additionally verifies required dependencies and credentials."}
+{"text":"The system preserves an immutable telemetry audit trail while caching duplicate embedding computation by normalized text hash."}
+{"text":"The answer does not contain enough context to make a safe operational change. Confirm the target environment and intended rollback plan."}
+{"text":"The change is complete. Verification evidence, affected services, and remaining limitations are documented for the operator."}

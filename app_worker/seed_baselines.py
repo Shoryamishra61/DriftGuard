@@ -363,7 +363,6 @@ def _input_stream(path: str) -> tuple[TextIO, bool]:
 
 async def _run(args: argparse.Namespace) -> int:
     config = WorkerConfig.from_env()
-    project_id = UUID(args.project_id)
     baseline_set = validate_baseline_set(args.baseline_set)
     valkey = None
     vector_store = None
@@ -406,12 +405,23 @@ async def _run(args: argparse.Namespace) -> int:
         if failure is not None:
             raise failure
 
+        if args.project_id is not None:
+            project_id = UUID(args.project_id)
+        else:
+            project_name = args.project_name.strip()
+            if not project_name or len(project_name) > 200:
+                raise BaselineValidationError("project_name must contain 1 to 200 characters")
+            project_id = await repository.project_id_by_name(project_name)
+            if project_id is None:
+                raise BaselineValidationError("project does not exist")
+
         embedder = await SentenceTransformerEmbedder.load(
             config.embedding_model,
             dimension=config.embedding_dimension,
             local_files_only=True,
         )
         stream, close_stream = _input_stream(args.input)
+        lines = list(stream)
         seeder = BaselineSeeder(
             project_id=project_id,
             baseline_set=baseline_set,
@@ -425,7 +435,18 @@ async def _run(args: argparse.Namespace) -> int:
             cache_ttl_seconds=config.baseline_cache_ttl_seconds,
             embedding_dimension=config.embedding_dimension,
         )
-        count = await seeder.seed(stream)
+        deadline = asyncio.get_running_loop().time() + args.wait_if_busy_seconds
+        while True:
+            try:
+                count = await seeder.seed(lines)
+                break
+            except BaselineValidationError as exc:
+                if (
+                    str(exc) != "baseline set seeding is already in progress"
+                    or asyncio.get_running_loop().time() >= deadline
+                ):
+                    raise
+                await asyncio.sleep(2)
         print(f"Seeded {count} baseline vectors for project {project_id} in set {baseline_set}.")
         return 0
     finally:
@@ -444,7 +465,9 @@ async def _run(args: argparse.Namespace) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Seed project-scoped DriftGuard baselines")
-    parser.add_argument("--project-id", required=True, help="Project UUID")
+    project = parser.add_mutually_exclusive_group(required=True)
+    project.add_argument("--project-id", help="Project UUID")
+    project.add_argument("--project-name", help="Exact project name")
     parser.add_argument("--baseline-set", required=True, help="Logical baseline set name")
     parser.add_argument(
         "--input",
@@ -452,6 +475,13 @@ def _parser() -> argparse.ArgumentParser:
         help="UTF-8 JSONL file containing one {'text': ...} object per line, or - for stdin",
     )
     parser.add_argument("--batch-size", type=int, default=32, choices=range(1, 129))
+    parser.add_argument(
+        "--wait-if-busy-seconds",
+        type=int,
+        default=0,
+        choices=range(0, 601),
+        help="wait for an identical concurrent seed operation before retrying",
+    )
     parser.add_argument(
         "--no-activate",
         action="store_true",

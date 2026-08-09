@@ -112,6 +112,7 @@ zerops:
       deployFiles:
         - app_worker
         - common_utils
+        - data/baselines
         - models
         - requirements-worker.txt
       addToRunPrepare:
@@ -164,7 +165,7 @@ zerops:
         SMTP_PORT: 587
         SMTP_SECURITY: starttls
         SMTP_TIMEOUT_SECONDS: 10
-      start: exec python -m app_worker.main
+      start: python -m app_worker.seed_baselines --project-name "Zerops Dashboard" --baseline-set competition-v1 --input data/baselines/competition-v1.jsonl --wait-if-busy-seconds 300 && exec python -m app_worker.main
       healthCheck:
         exec:
           command: python -c "import os,sys,time; p='/tmp/driftguard-worker-ready'; sys.exit(0 if os.path.isfile(p) and time.time()-os.path.getmtime(p) <= 20 else 1)"

@@ -8,6 +8,7 @@ from app_worker.domain import BaselineManifest
 from app_worker.seed_baselines import (
     BaselineSeeder,
     BaselineValidationError,
+    _parser,
     parse_baseline_line,
     validate_baseline_set,
 )
@@ -253,3 +254,19 @@ async def test_exact_rerun_embeds_only_strict_cache_misses() -> None:
 def test_baseline_set_validation_rejects_unsafe_names(value) -> None:
     with pytest.raises(BaselineValidationError):
         validate_baseline_set(value)
+
+
+def test_cli_requires_exactly_one_project_selector() -> None:
+    parser = _parser()
+
+    by_id = parser.parse_args(
+        ["--project-id", str(uuid4()), "--baseline-set", "competition-v1"]
+    )
+    by_name = parser.parse_args(
+        ["--project-name", "Zerops Dashboard", "--baseline-set", "competition-v1"]
+    )
+
+    assert by_id.project_name is None
+    assert by_name.project_id is None
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--baseline-set", "competition-v1"])

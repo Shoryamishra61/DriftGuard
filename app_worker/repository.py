@@ -188,6 +188,15 @@ class PostgresRepository:
                 )
             )
 
+    async def project_id_by_name(self, project_name: str) -> UUID | None:
+        """Resolve an exact tenant name for controlled deployment bootstrap."""
+
+        async with self._pool.acquire() as connection:
+            return await connection.fetchval(
+                "SELECT id FROM projects WHERE name = $1",
+                project_name,
+            )
+
     async def active_baseline_set(self, project_id: UUID) -> str | None:
         async with self._pool.acquire() as connection:
             return await connection.fetchval(
