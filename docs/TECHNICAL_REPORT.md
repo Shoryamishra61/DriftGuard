@@ -74,7 +74,7 @@ Exactly-once external notification is not claimed. A provider that ignores idemp
 The threat model includes tenant confusion, credential leakage, server-side request forgery, DNS rebinding, unbounded payloads, stale delivery ownership, and browser-side privilege escalation.
 
 - Administrative routes require both tenant and admin credentials.
-- Dashboard credentials remain server-side and mutations require same-origin checks.
+- The challenge deployment exposes a server-enforced public read-only dashboard; mutations are rejected before proxying. Private deployments can require Basic authentication, and administrative API credentials always remain server-side.
 - Notification targets use provider-specific validation or an explicit hostname allowlist.
 - Resolved destinations must be public unicast and are connected through the validated address while retaining TLS SNI and HTTP Host.
 - PostgreSQL, Valkey, and Qdrant have no public subdomain access.
@@ -98,7 +98,7 @@ The final tree produced 189 passing default Python tests. GitHub CI provisions P
 
 ### 7.2 Live Zerops verification
 
-The deployed project reported all six services `ACTIVE`. The public dashboard liveness endpoint, authenticated dashboard, dashboard readiness endpoint, API health, and API status returned success. Infrastructure Pulse reported healthy PostgreSQL, Valkey, Qdrant, and worker state. At one observed instant, dependency latency was approximately 8.67 ms for PostgreSQL, 8.63 ms for Valkey, 10.55 ms for Qdrant, and 7.08 ms for the worker heartbeat path. These are point observations, not percentile guarantees.
+The deployed project reported all six services `ACTIVE`. The public dashboard, liveness endpoint, readiness endpoint, API health, and API status returned success. Infrastructure Pulse reported healthy PostgreSQL, Valkey, Qdrant, and worker state. At one observed instant, dependency latency was approximately 8.67 ms for PostgreSQL, 8.63 ms for Valkey, 10.55 ms for Qdrant, and 7.08 ms for the worker heartbeat path. These are point observations, not percentile guarantees.
 
 Both starting workers completed the idempotent bootstrap of the same 50-record `competition-v1` baseline. A public telemetry request then returned `202 Accepted`; the worker matched baseline `5612423b-4cfc-5e0b-8d72-00803e9f79a5`, calculated cosine distance `0.75923121`, and persisted the deliberate MUTE outcome as incident status `SNOOZED` and route status `SUPPRESSED`. Qdrant reported 52 points—the 50 baselines, one manifest, and one evaluation—and Valkey queue depth returned to zero.
 

@@ -30,6 +30,7 @@ zerops:
       envVariables:
         API_INTERNAL_URL: http://api:8000
         DRIFTGUARD_DASHBOARD_USERNAME: driftguard
+        DRIFTGUARD_PUBLIC_READ_ONLY: "true"
       start: npm run start
       healthCheck:
         httpGet:

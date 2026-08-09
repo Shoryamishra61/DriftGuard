@@ -55,6 +55,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .eyebrow, .kicker { margin: 0 0 4px; color: var(--terracotta); font: 720 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .17em; }
 h1 { margin: 0; font-size: 19px; letter-spacing: -.025em; }
 .topbarActions { display: flex; align-items: center; gap: 14px; }
+.accessBadge { border: 1px solid rgba(93,130,109,.24); border-radius: 999px; padding: 7px 10px; color: #4f725e; background: rgba(93,130,109,.08); font: 720 9px ui-monospace, monospace; letter-spacing: .08em; }
 .tourReplay { border: 1px solid rgba(89,74,57,.16); border-radius: 999px; padding: 9px 14px; color: #5f554a; background: rgba(255,253,248,.75); box-shadow: 0 7px 20px rgba(79,61,42,.06); font-size: 11px; font-weight: 680; cursor: pointer; transition: transform .18s ease, background .18s ease, box-shadow .18s ease; }
 .tourReplay:hover { transform: translateY(-1px); background: #fffdf8; box-shadow: 0 10px 25px rgba(79,61,42,.1); }
 .liveState { display: grid; grid-template-columns: 9px auto; align-items: center; column-gap: 9px; font-size: 12px; color: #514a42; }
@@ -120,6 +121,7 @@ h1 { margin: 0; font-size: 19px; letter-spacing: -.025em; }
 
 .alertList { max-height: 460px; overflow: auto; scrollbar-color: #d2c7b9 transparent; }
 .ruleList { max-height: 620px; overflow: auto; scrollbar-color: #d2c7b9 transparent; }
+.readOnlyNotice { margin: 0; padding: 13px 21px; border-bottom: 1px solid var(--line); color: #6e665d; background: rgba(93,130,109,.055); font-size: 11px; line-height: 1.5; }
 .feedToolbar { display: grid; grid-template-columns: auto minmax(180px, 1fr); gap: 12px; align-items: center; padding: 13px 21px; border-bottom: 1px solid var(--line); background: rgba(249,245,237,.55); }
 .feedToolbar label { color: var(--muted); font: 650 10px ui-monospace, monospace; text-transform: uppercase; letter-spacing: .08em; }
 .feedToolbar input, .ruleEditor input, .ruleEditor select { width: 100%; border: 1px solid var(--line); border-radius: 11px; padding: 9px 11px; color: var(--text); background: rgba(255,254,250,.9); outline: none; transition: border-color .18s ease, box-shadow .18s ease; }
@@ -160,7 +162,8 @@ h1 { margin: 0; font-size: 19px; letter-spacing: -.025em; }
 .ruleEditor .activeToggle input { width: auto; accent-color: var(--terracotta); }
 .ruleEditor button { min-height: 36px; border: 1px solid rgba(185,96,67,.3); border-radius: 11px; padding: 8px 13px; color: #9f4d34; background: rgba(185,96,67,.075); font: 700 10px ui-monospace, monospace; cursor: pointer; }
 .ruleEditor button:hover { background: rgba(185,96,67,.12); }
-.ruleEditor button:disabled { opacity: .5; cursor: wait; }
+.ruleEditor input:disabled, .ruleEditor select:disabled { color: #746c62; background: rgba(244,239,231,.72); cursor: not-allowed; }
+.ruleEditor button:disabled { opacity: .5; cursor: not-allowed; }
 
 .tourLayer { position: fixed; inset: 0; z-index: 1000; }
 .tourScrim { position: absolute; inset: 0; background: rgba(49,42,34,.5); backdrop-filter: blur(2px); }

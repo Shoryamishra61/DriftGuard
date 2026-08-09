@@ -148,7 +148,7 @@ const TOUR_STEPS: TourStep[] = [
     eyebrow: "WELCOME TO DRIFTGUARD",
     title: "A live judging flow, not a slide deck.",
     description:
-      "This guided tour explains every production surface and safely runs one real semantic-drift evaluation. It creates only a MUTE rule, so no external provider is contacted.",
+      "This guided tour explains every production surface and verifies persisted semantic-drift evidence from the deployed system. Public judging access cannot change data or contact an external provider.",
   },
   {
     target: "hero",
@@ -188,9 +188,9 @@ const TOUR_STEPS: TourStep[] = [
   {
     target: "incidents",
     eyebrow: "06 · LIVE PROOF",
-    title: "Creating one real drift incident now.",
+    title: "Verifying a real drift incident now.",
     description:
-      "The tour is ensuring a MUTE-only demo rule, submitting labeled telemetry, and waiting for the deployed worker to persist the semantic evidence.",
+      "The tour reads a completed evaluation, its nearest baseline, drift distance, and durable routing outcome from the live deployment.",
     demo: true,
   },
   {
@@ -202,9 +202,9 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     eyebrow: "TOUR COMPLETE",
-    title: "You just exercised the production path.",
+    title: "You just inspected the production path.",
     description:
-      "The judging flow touched authentication, the API, PostgreSQL outbox, Valkey queue, worker embedding, Qdrant matching, and durable alert persistence. Replay it any time from the header.",
+      "The judging flow verified the API, PostgreSQL evidence, Valkey and worker health, Qdrant matching, and durable alert state without granting public mutation access. Replay it any time from the header.",
   },
 ];
 
@@ -240,7 +240,7 @@ function statusTone(status?: string) {
   return "unhealthy";
 }
 
-export function DriftDashboard() {
+export function DriftDashboard({ publicReadOnly = false }: { publicReadOnly?: boolean }) {
   const [trendWindow, setTrendWindow] = useState<TrendWindow>("24h");
   const [alertQuery, setAlertQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -326,8 +326,27 @@ export function DriftDashboard() {
 
   const runJudgingDemo = useCallback(async () => {
     setDemoState("running");
-    setDemoMessage("Preparing a safe MUTE-only routing rule…");
+    setDemoMessage(
+      publicReadOnly
+        ? "Reading persisted evidence from the live deployment…"
+        : "Preparing a safe MUTE-only routing rule…",
+    );
     try {
+      if (publicReadOnly) {
+        const response = await fetchJson<{ items: AlertRecord[] }>("alerts?limit=100");
+        const verified = response.items.find(
+          (alert) => alert.drift_distance != null && alert.matched_baseline_text,
+        );
+        if (!verified) throw new Error("No completed semantic evidence is currently available.");
+        setAlerts(response.items);
+        await Promise.all([loadTelemetry(), loadPulse()]);
+        setDemoState("complete");
+        setDemoMessage(
+          `Verified drift ${formatMetric(verified.drift_distance, 3)} · ${verified.status} / ${verified.route_status}`,
+        );
+        return;
+      }
+
       const currentRules = await fetchJson<AlertRule[]>("alert-rules");
       const existing = currentRules.find((rule) => rule.rule_name === TOUR_RULE_NAME);
       const rulePayload = {
@@ -387,7 +406,7 @@ export function DriftDashboard() {
       setDemoState("failed");
       setDemoMessage((error as Error).message || "The live proof could not complete.");
     }
-  }, [loadPulse, loadTelemetry]);
+  }, [loadPulse, loadTelemetry, publicReadOnly]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSearchQuery(alertQuery.trim()), 300);
@@ -530,6 +549,7 @@ export function DriftDashboard() {
           </div>
         </div>
         <div className="topbarActions">
+          {publicReadOnly && <span className="accessBadge">PUBLIC · READ ONLY</span>}
           <button className="tourReplay" onClick={replayTour} type="button">
             Guided demo
           </button>
@@ -775,9 +795,19 @@ export function DriftDashboard() {
         <article className="panel rulesPanel" data-tour="rules">
           <PanelHeading eyebrow="ROUTING POLICY" title="Alert behavior" detail="Project-scoped threshold actions" />
           <div className="ruleList">
-            <RuleEditor onSaved={() => void loadTelemetry()} />
+            {publicReadOnly && (
+              <p className="readOnlyNotice">
+                Judge view: policies are visible, while creation and edits remain disabled.
+              </p>
+            )}
+            {!publicReadOnly && <RuleEditor onSaved={() => void loadTelemetry()} />}
             {rules.map((rule) => (
-              <RuleEditor key={rule.id} onSaved={() => void loadTelemetry()} rule={rule} />
+              <RuleEditor
+                key={rule.id}
+                onSaved={() => void loadTelemetry()}
+                readOnly={publicReadOnly}
+                rule={rule}
+              />
             ))}
           </div>
         </article>
@@ -919,7 +949,15 @@ function GuidedTour({
   );
 }
 
-function RuleEditor({ rule, onSaved }: { rule?: AlertRule; onSaved: () => void }) {
+function RuleEditor({
+  rule,
+  onSaved,
+  readOnly = false,
+}: {
+  rule?: AlertRule;
+  onSaved: () => void;
+  readOnly?: boolean;
+}) {
   const [name, setName] = useState(rule?.rule_name ?? "");
   const [threshold, setThreshold] = useState(rule?.threshold ?? 0.3);
   const [action, setAction] = useState<AlertRule["action_type"]>(rule?.action_type ?? "NOTIFY");
@@ -930,6 +968,7 @@ function RuleEditor({ rule, onSaved }: { rule?: AlertRule; onSaved: () => void }
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (readOnly) return;
     setSaving(true);
     setError(null);
     const payload = {
@@ -974,13 +1013,14 @@ function RuleEditor({ rule, onSaved }: { rule?: AlertRule; onSaved: () => void }
       </div>
       <label>
         <span>Name</span>
-        <input maxLength={100} onChange={(event) => setName(event.target.value)} required value={name} />
+        <input disabled={readOnly} maxLength={100} onChange={(event) => setName(event.target.value)} required value={name} />
       </label>
       <label>
         <span>Threshold</span>
         <input
           max="2"
           min="0"
+          disabled={readOnly}
           onChange={(event) => setThreshold(event.target.valueAsNumber)}
           required
           step="0.01"
@@ -990,7 +1030,7 @@ function RuleEditor({ rule, onSaved }: { rule?: AlertRule; onSaved: () => void }
       </label>
       <label>
         <span>Route</span>
-        <select onChange={(event) => setAction(event.target.value as AlertRule["action_type"])} value={action}>
+        <select disabled={readOnly} onChange={(event) => setAction(event.target.value as AlertRule["action_type"])} value={action}>
           <option value="NOTIFY">Notify now</option>
           <option value="DIGEST">Daily digest</option>
           <option value="MUTE">Mute</option>
@@ -1005,6 +1045,7 @@ function RuleEditor({ rule, onSaved }: { rule?: AlertRule; onSaved: () => void }
               : "Slack, Discord, PagerDuty, or allowlisted HTTPS"}
         </span>
         <input
+          disabled={readOnly}
           maxLength={255}
           onChange={(event) => setTarget(event.target.value)}
           placeholder={action === "MUTE" ? "Optional" : action === "DIGEST" ? "mailto:alerts@example.com" : "https://hooks.slack.com/services/..."}
@@ -1014,10 +1055,12 @@ function RuleEditor({ rule, onSaved }: { rule?: AlertRule; onSaved: () => void }
         />
       </label>
       <label className="activeToggle">
-        <input checked={active} onChange={(event) => setActive(event.target.checked)} type="checkbox" />
+        <input checked={active} disabled={readOnly} onChange={(event) => setActive(event.target.checked)} type="checkbox" />
         <span>Active</span>
       </label>
-      <button disabled={saving} type="submit">{saving ? "Saving…" : rule ? "Save" : "Add rule"}</button>
+      <button disabled={saving || readOnly} type="submit">
+        {readOnly ? "Read only" : saving ? "Saving…" : rule ? "Save" : "Add rule"}
+      </button>
     </form>
   );
 }

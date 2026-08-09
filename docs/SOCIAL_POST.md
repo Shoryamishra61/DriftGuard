@@ -1,69 +1,141 @@
-# DriftGuard Social Launch Package
+# DriftGuard social launch package
 
-## Primary post
+The challenge requires a public post containing the project name, a short explanation, a short working-product video, the live deployment, a brief account of Zerops usage, and tags for `@WeMakeDevs` and `@zeropsio`.
 
-I built **DriftGuard** for the Zerops Challenge: a live reliability monitor that catches semantic drift in production LLM answers—even when the upstream API still returns `200 OK`.
+No wording can guarantee reach or a prize. This package instead uses defensible communication principles:
 
-Every telemetry event is committed with a PostgreSQL transactional outbox, queued through Valkey, embedded by horizontally scaled workers with a pinned MiniLM model, and compared against versioned gold baselines in Qdrant. DriftGuard then routes the result through immediate NOTIFY, consolidated DIGEST, or auditable MUTE policy.
+- **Information gap:** open with the counterintuitive failure—`200 OK` can still be semantically wrong.
+- **Loss salience:** make the invisible production risk concrete before introducing the product.
+- **Cognitive fluency:** one idea per paragraph, short sentences, and named evidence.
+- **Specificity:** six services and actual failure controls are more credible than “production-ready.”
+- **Narrative closure:** move from silent failure, to live detection, to an invitation to inspect the system.
+- **Epistemic honesty:** disclose AI assistance and measured limits; trust is part of a reliability product.
+
+## Recommended X thread
+
+Attach the 60–70 second video to post 1. Publish the remaining numbered posts as replies.
+
+### 1/7 — Hook
+
+`200 OK` does not mean an LLM answer is still right.
+
+The service can stay online while its meaning quietly drifts.
+
+I built **DriftGuard** to make that invisible failure observable—in real time, on Zerops. 🎥
+
+### 2/7 — Problem
+
+Uptime monitors ask: “Did the model respond?”
+
+DriftGuard asks: “Did the response remain semantically aligned with what production considers correct?”
+
+It compares live outputs with versioned gold baselines and turns meaningful deviations into incidents.
+
+### 3/7 — Product proof
+
+The dashboard connects model quality with operational evidence:
+
+• semantic-distance trends
+• nearest-baseline evidence
+• vector topology
+• NOTIFY / DIGEST / MUTE policy
+• live PostgreSQL, Valkey, Qdrant, and worker health
+
+### 4/7 — Zerops story
 
 Zerops runs the complete six-service system:
 
-- Next.js dashboard and FastAPI API on public TLS ingress
-- Python workers on the private network
-- PostgreSQL 16 HA for authoritative state
-- Valkey for the queue, rate limits, cache, receipts, and heartbeats
-- Qdrant for tenant-isolated vector search
-- Generated secrets, private DNS, autoscaling, cached builds, readiness, and liveness from `zerops.yaml`
+Next.js + FastAPI + Python workers + PostgreSQL HA + Valkey + Qdrant.
 
-The part I care about most: the system is honest under failure. An alert is not marked notified until delivery succeeds, duplicate jobs are fenced across PostgreSQL and Qdrant, and Infrastructure Pulse shows queue depth plus live database/cache/vector latency.
+Only the dashboard and API are public. Everything else communicates through the private Zerops network, with independent builds and readiness gates.
 
-Live: https://dashboard-141-3000.sea1.zerops.app  
-Source: https://github.com/Shoryamishra61/DriftGuard
+### 5/7 — Engineering idea
 
-Built with AI assistance from OpenAI Codex; I directed the product, architecture, security decisions, deployment, and verification.
+The design principle was simple: uncertainty must not become data loss.
+
+Telemetry and its outbox event commit atomically. Duplicate workers are fenced. Baselines are versioned. An alert is marked notified only after delivery succeeds.
+
+Reliability is recorded, not assumed.
+
+### 6/7 — Honest evidence
+
+I also tried to break it.
+
+The bounded 500 RPS test exposed a real capacity limit, so I published the failed target and exact percentiles instead of hiding them.
+
+A reliability tool should be honest about its own reliability.
+
+### 7/7 — Close
+
+**Live, public judge view:**
+https://dashboard-141-3000.sea1.zerops.app
+
+**Source and research notes:**
+https://github.com/Shoryamishra61/DriftGuard
+
+Built with disclosed OpenAI Codex assistance and my product, architecture, deployment, and review decisions.
 
 @WeMakeDevs @zeropsio
 
-#ZeropsChallenge #BuildInPublic #LLMOps #AIEngineering #DistributedSystems
+#ZeropsChallenge #LLMOps #DistributedSystems
 
-## Short variant
+## Recommended LinkedIn post
 
-Production LLMs can drift while every request still returns `200 OK`.
+**A production LLM can return `200 OK` and still be wrong in the way that matters: meaning.**
 
-I built **DriftGuard**: a live semantic-drift and reliability monitor running as six services on Zerops—Next.js, FastAPI, Python workers, PostgreSQL HA, Valkey, and Qdrant.
+That is the failure I built **DriftGuard** to observe for The Zerops Challenge.
 
-Transactional ingestion. Tenant-safe vectors. Durable NOTIFY/DIGEST/MUTE routing. Live Infrastructure Pulse.
+DriftGuard compares production answers with versioned gold baselines, measures their semantic distance, and turns meaningful deviations into immediate notifications, consolidated digests, or auditable muted incidents.
 
-Demo: https://dashboard-141-3000.sea1.zerops.app  
-Code: https://github.com/Shoryamishra61/DriftGuard
+The interesting part is not only the embedding model. It is the reliability boundary around it:
 
-@WeMakeDevs @zeropsio #ZeropsChallenge #LLMOps
+- telemetry and its queue event commit atomically in PostgreSQL;
+- Valkey carries asynchronous work without becoming the source of truth;
+- workers are fenced across PostgreSQL and Qdrant;
+- baseline searches are isolated by project, baseline version, and model revision;
+- delivery state changes only after a notification succeeds;
+- Infrastructure Pulse shows whether PostgreSQL, Valkey, Qdrant, and workers are healthy.
 
-## 70-second video script
+Zerops runs the full six-service architecture: Next.js dashboard, FastAPI API, Python workers, PostgreSQL HA, Valkey, and Qdrant. It provides private networking, managed data services, independent build pipelines, autoscaling, readiness gates, secrets, and public TLS ingress.
 
-**0–7 seconds — problem**  
-“An LLM can return 200 OK while the meaning of its answers quietly degrades. DriftGuard makes that failure observable.”
+I also ran a bounded 500 RPS experiment. It exposed a capacity ceiling rather than proving the target, so the repository publishes the failed result and exact measurements. That honesty is deliberate: a reliability product should not manufacture certainty about itself.
 
-**7–20 seconds — live dashboard**  
-Open the authenticated live URL. Show drift trend, evaluation latency, active alerts, and the vector projection.
+The live deployment is public and read-only. Its guided tour walks through real infrastructure and persisted semantic evidence.
 
-**20–32 seconds — Infrastructure Pulse**  
-Show healthy PostgreSQL, Valkey queue depth, Qdrant latency/vector count, and worker heartbeat. Say: “These are live Zerops services, not mock dashboard data.”
+🎥 Attach the short demo video here.
 
-**32–45 seconds — ingest and result**  
-Submit one telemetry event. Refresh or wait for polling. Show the evaluation and matched baseline evidence.
+Live: https://dashboard-141-3000.sea1.zerops.app
+Source: https://github.com/Shoryamishra61/DriftGuard
 
-**45–58 seconds — architecture**  
-Show the README architecture diagram or Zerops project. Name the six services and point out that only dashboard and API are public.
+OpenAI Codex assisted with implementation, testing, review, and deployment. I defined the problem, directed the architecture and trade-offs, controlled deployment, and reviewed the submitted system.
 
-**58–70 seconds — reliability and close**  
-Show the transactional outbox and delivery status briefly. Say: “DriftGuard keeps ingestion durable, vector search tenant-safe, and notifications honest under failure. It is live on Zerops and the source is public.”
+@WeMakeDevs @zeropsio
 
-## Recording checklist
+#ZeropsChallenge #LLMOps #AIEngineering #DistributedSystems #BuildInPublic
 
-- Use a 1080p recording with the browser zoomed to make service cards readable.
-- Hide bookmarks, email, Zerops tokens, API keys, passwords, webhook targets, and browser autofill.
-- Preload one normal and one visibly drifted evaluation so the dashboard has a clear story.
-- Keep the cursor movement deliberate; do not scroll through raw secrets or runtime environment pages.
-- End on the live URL and repository URL for at least three seconds.
-- Add captions because many viewers watch without sound.
+## 65-second video sequence
+
+Do not narrate a slide deck. Show the live URL continuously except for the six-service Zerops view.
+
+| Time | Visual | Exact narration |
+| --- | --- | --- |
+| 0–6s | Open on the drift incident, then reveal the dashboard | “An LLM can return 200 OK while the meaning of its answer quietly fails.” |
+| 6–13s | Hero and four metrics | “DriftGuard turns that silent failure into a measurable production signal.” |
+| 13–23s | Drift chart and vector topology | “Each answer is compared with a versioned project baseline using a pinned semantic model and tenant-filtered vector search.” |
+| 23–34s | Infrastructure Pulse | “These are live Zerops checks—not mock cards—for PostgreSQL, Valkey, Qdrant, the task queue, and workers.” |
+| 34–44s | Expand incident evidence | “Here is the prompt, degraded output, nearest baseline, drift distance, and durable routing result.” |
+| 44–55s | Zerops project with six services | “Zerops builds and operates six services. Only the dashboard and API are public; the data plane stays on the private network.” |
+| 55–65s | Return to dashboard; show live and source URLs | “DriftGuard makes semantic reliability observable—and makes its own limits visible too. Try the live read-only tour and inspect the source.” |
+
+## Recording and publishing checklist
+
+- [ ] Record at 1080p with browser zoom high enough to read cards on a phone.
+- [ ] Begin with the failure, not a logo animation or biography.
+- [ ] Keep every password, API key, webhook destination, token, email, and browser autofill hidden.
+- [ ] Show the real browser address and the Zerops service list.
+- [ ] Add burned-in captions; many viewers watch without sound.
+- [ ] Use one clean pointer movement per sentence and avoid frantic scrolling.
+- [ ] End on the live URL and repository for at least three seconds.
+- [ ] Attach the video directly to the social post instead of linking only to an external player.
+- [ ] Tag `@WeMakeDevs` and `@zeropsio` exactly.
+- [ ] Reply thoughtfully to early comments with architecture or failure-testing details; do not spam tags or engagement bait.

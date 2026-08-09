@@ -48,22 +48,25 @@ function decodeCredentials(authorization: string | null) {
 }
 
 export async function proxy(request: NextRequest) {
+  const publicReadOnly = process.env.DRIFTGUARD_PUBLIC_READ_ONLY === "true";
   const expectedUsername = process.env.DRIFTGUARD_DASHBOARD_USERNAME;
   const expectedPassword = process.env.DRIFTGUARD_DASHBOARD_PASSWORD;
-  if (!expectedUsername || !expectedPassword) {
+  if (!publicReadOnly && (!expectedUsername || !expectedPassword)) {
     return new NextResponse("Dashboard authentication is not configured", {
       status: 503,
       headers: { "Cache-Control": "no-store" },
     });
   }
 
-  const credentials = decodeCredentials(request.headers.get("authorization"));
-  const [usernameMatches, passwordMatches] = await Promise.all([
-    secretMatches(credentials?.username ?? "", expectedUsername),
-    secretMatches(credentials?.password ?? "", expectedPassword),
-  ]);
-  if (!credentials || !usernameMatches || !passwordMatches) {
-    return unauthorized();
+  if (!publicReadOnly) {
+    const credentials = decodeCredentials(request.headers.get("authorization"));
+    const [usernameMatches, passwordMatches] = await Promise.all([
+      secretMatches(credentials?.username ?? "", expectedUsername!),
+      secretMatches(credentials?.password ?? "", expectedPassword!),
+    ]);
+    if (!credentials || !usernameMatches || !passwordMatches) {
+      return unauthorized();
+    }
   }
 
   const response = NextResponse.next();
@@ -71,6 +74,7 @@ export async function proxy(request: NextRequest) {
   response.headers.set("Referrer-Policy", "no-referrer");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-DriftGuard-Access", publicReadOnly ? "public-read-only" : "authenticated");
   return response;
 }
 

@@ -39,6 +39,13 @@ async function proxy(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ detail: "Route not available" }, { status: 404 });
   }
 
+  if (process.env.DRIFTGUARD_PUBLIC_READ_ONLY === "true" && request.method !== "GET") {
+    return NextResponse.json(
+      { detail: "The public judging dashboard is read-only" },
+      { status: 403, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   if (request.method !== "GET" && !requestIsSameOrigin(request)) {
     return NextResponse.json({ detail: "Cross-origin mutation rejected" }, { status: 403 });
   }
