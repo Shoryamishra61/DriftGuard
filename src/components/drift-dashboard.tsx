@@ -219,7 +219,10 @@ async function fetchJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 async function mutateJson<T>(path: string, method: "POST" | "PUT", body: unknown) {
   const response = await fetch(endpoint(path), {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-DriftGuard-Dashboard-Request": "1",
+    },
     body: JSON.stringify(body),
     cache: "no-store",
   });

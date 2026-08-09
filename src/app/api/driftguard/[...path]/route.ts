@@ -18,17 +18,13 @@ function routeIsAllowed(route: string, method: string) {
 
 function requestIsSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
-  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",", 1)[0]?.trim();
-  const host = request.headers.get("host")?.trim();
-  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim();
-  const requestProtocol = request.nextUrl.protocol.replace(":", "");
-  if (!origin) return false;
+  const fetchSite = request.headers.get("sec-fetch-site")?.toLowerCase();
+  const dashboardMarker = request.headers.get("x-driftguard-dashboard-request");
+  if (!origin || dashboardMarker !== "1") return false;
+  if (fetchSite) return fetchSite === "same-origin";
 
   try {
-    const parsedOrigin = new URL(origin);
-    const hosts = new Set([host, forwardedHost].filter(Boolean));
-    const protocols = new Set([requestProtocol, forwardedProtocol].filter(Boolean));
-    return hosts.has(parsedOrigin.host) && protocols.has(parsedOrigin.protocol.replace(":", ""));
+    return new URL(origin).protocol === "https:" || new URL(origin).hostname === "localhost";
   } catch {
     return false;
   }
