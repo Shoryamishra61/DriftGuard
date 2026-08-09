@@ -205,6 +205,21 @@ async def test_evaluation_upsert_is_idempotently_keyed_by_run_uuid() -> None:
     }
 
 
+@pytest.mark.asyncio
+async def test_retention_deletes_evaluation_points_by_durable_run_ids() -> None:
+    run_ids = [uuid4(), uuid4()]
+    client = RecordingQdrantClient(uuid4(), 0.7)
+    store = QdrantVectorStore(client, collection="drift_baselines", dimension=384)
+
+    await store.delete_evaluations(run_ids)
+
+    assert len(client.deletes) == 1
+    deletion = client.deletes[0]
+    assert deletion["collection_name"] == "drift_baselines"
+    assert deletion["wait"] is True
+    assert deletion["points_selector"].points == [str(run_id) for run_id in run_ids]
+
+
 @pytest.mark.parametrize(
     ("similarity", "expected_distance"),
     [(1.0, 0.0), (0.82, 0.18), (0.0, 1.0), (-1.0, 2.0)],

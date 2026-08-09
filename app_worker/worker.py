@@ -33,6 +33,7 @@ from .embedding import SentenceTransformerEmbedder
 from .notifications import WebhookSender
 from .readiness import refresh_readiness_marker
 from .repository import PostgresRepository
+from .retention import RetentionManager
 from .retry import retry_startup
 from .vector_store import QdrantVectorStore
 
@@ -88,6 +89,12 @@ class DriftWorker:
         self._monotonic = monotonic
         self._last_evaluation_latency_ms: int | None = None
         self._closed = False
+        self._retention_manager = RetentionManager(
+            config=config,
+            repository=repository,
+            vector_store=vector_store,
+            utc_now=self._utc_now,
+        )
 
     @classmethod
     async def create(cls, config: WorkerConfig) -> DriftWorker:
@@ -201,6 +208,14 @@ class DriftWorker:
         delivery_task = asyncio.create_task(
             self._delivery_loop(), name="driftguard-worker-delivery"
         )
+        retention_task = (
+            asyncio.create_task(
+                self._retention_loop(),
+                name="driftguard-worker-retention",
+            )
+            if self.config.retention_enabled
+            else None
+        )
         in_flight: set[asyncio.Task[None]] = set()
         queue_failures = 0
         LOGGER.info("worker %s is consuming %s", self.worker_id, self.config.queue_name)
@@ -240,9 +255,12 @@ class DriftWorker:
                 await asyncio.gather(*in_flight, return_exceptions=True)
             heartbeat_task.cancel()
             delivery_task.cancel()
+            if retention_task is not None:
+                retention_task.cancel()
             await asyncio.gather(
                 heartbeat_task,
                 delivery_task,
+                *([retention_task] if retention_task is not None else []),
                 return_exceptions=True,
             )
             await self._remove_heartbeat()
@@ -800,6 +818,33 @@ class DriftWorker:
         finally:
             if lock_acquired:
                 await self._release_route_lock(lock_key, lock_owner)
+
+    async def _retention_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                result = await self._retention_manager.run_once()
+                if result.lock_acquired and any(
+                    (
+                        result.redacted_runs,
+                        result.purged_outbox_events,
+                        result.expired_runs,
+                        result.deleted_vectors,
+                        result.purged_vector_receipts,
+                    )
+                ):
+                    LOGGER.info(
+                        "retention redacted=%d outbox=%d expired=%d vectors=%d receipts=%d",
+                        result.redacted_runs,
+                        result.purged_outbox_events,
+                        result.expired_runs,
+                        result.deleted_vectors,
+                        result.purged_vector_receipts,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                await self._log_failure_once(None, exc, context="retention")
+            await self._wait_or_stop(float(self.config.retention_interval_seconds))
 
     async def _delivery_loop(self) -> None:
         failure_count = 0

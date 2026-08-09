@@ -232,6 +232,19 @@ class QdrantVectorStore:
             )
         )
 
+    async def delete_evaluations(self, run_ids: list[UUID]) -> None:
+        """Delete evaluation points idempotently after the PostgreSQL retention outbox commits."""
+
+        if not run_ids:
+            return
+        await self._circuit_breaker.call(
+            lambda: self._client.delete(
+                collection_name=self._collection,
+                points_selector=models.PointIdsList(points=[str(run_id) for run_id in run_ids]),
+                wait=True,
+            )
+        )
+
     async def upsert_baselines(self, baselines: list[BaselineSeed]) -> None:
         if not baselines:
             return

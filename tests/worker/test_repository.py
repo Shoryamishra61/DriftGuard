@@ -57,6 +57,9 @@ def schema_row(
         "evaluations": "evaluations",
         "alert_rules": "alert_rules",
         "alerts": "alerts",
+        "legal_holds": "legal_holds",
+        "retention_vector_outbox": "retention_vector_outbox",
+        "retention_vector_index": "idx_retention_vector_outbox_pending",
         "delivery_lease_index": (
             "idx_alerts_delivery_lease_token" if delivery_index_ready else None
         ),
@@ -94,7 +97,7 @@ async def test_startup_ping_rejects_pre_head_schema(
 
 
 @pytest.mark.asyncio
-async def test_startup_ping_accepts_revision_0005_schema() -> None:
+async def test_startup_ping_accepts_revision_0006_schema() -> None:
     connection = RecordingConnection(schema=schema_row(delivery_ready=True, baseline_ready=True))
     repository = PostgresRepository(RecordingPool(connection))
 
@@ -105,6 +108,7 @@ async def test_startup_ping_accepts_revision_0005_schema() -> None:
     assert "active_baseline_set" in query
     assert "delivery_lease_token" in query
     assert "idx_alerts_delivery_lease_token" in query
+    assert "idx_retention_vector_outbox_pending" in query
     assert "created_at" not in query
 
 

@@ -67,6 +67,7 @@ async def test_liveness_does_not_claim_dependency_readiness() -> None:
 
     assert live.status_code == 200
     assert live.json() == {"status": "alive"}
+    assert live.headers["server-timing"].startswith("app;dur=")
     assert ready.status_code == 503
     assert ready.json()["status"] == "not_ready"
     assert ready.json()["services"] == {

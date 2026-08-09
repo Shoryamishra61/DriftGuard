@@ -70,6 +70,15 @@ def _choice(
     return value
 
 
+def _boolean(source: Mapping[str, str], name: str, default: bool) -> bool:
+    raw = source.get(name, "true" if default else "false").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigurationError(f"{name} must be a boolean")
+
+
 def _database_url(source: Mapping[str, str]) -> str:
     explicit = source.get("DATABASE_URL", "").strip()
     if explicit:
@@ -136,10 +145,21 @@ class WorkerConfig:
     delivery_lease_seconds: int = 60
     delivery_max_attempts: int = 5
     worker_concurrency: int = 4
+    retention_enabled: bool = False
+    retention_interval_seconds: int = 60
+    retention_raw_text_days: int = 30
+    retention_telemetry_days: int = 90
+    retention_outbox_days: int = 7
+    retention_batch_size: int = 5000
+    retention_max_batches: int = 10
 
     def __post_init__(self) -> None:
         if self.db_pool_max_size <= self.worker_concurrency:
             raise ConfigurationError("DB_POOL_MAX_SIZE must be greater than WORKER_CONCURRENCY")
+        if self.retention_telemetry_days < self.retention_raw_text_days:
+            raise ConfigurationError(
+                "RETENTION_TELEMETRY_DAYS must be at least RETENTION_RAW_TEXT_DAYS"
+            )
 
     @property
     def qdrant_url(self) -> str:
@@ -291,4 +311,23 @@ class WorkerConfig:
                 values, "DELIVERY_MAX_ATTEMPTS", 5, minimum=1, maximum=20
             ),
             worker_concurrency=_integer(values, "WORKER_CONCURRENCY", 4, minimum=1, maximum=32),
+            retention_enabled=_boolean(values, "RETENTION_ENABLED", True),
+            retention_interval_seconds=_integer(
+                values, "RETENTION_INTERVAL_SECONDS", 60, minimum=60, maximum=86400
+            ),
+            retention_raw_text_days=_integer(
+                values, "RETENTION_RAW_TEXT_DAYS", 30, minimum=1, maximum=3650
+            ),
+            retention_telemetry_days=_integer(
+                values, "RETENTION_TELEMETRY_DAYS", 90, minimum=1, maximum=3650
+            ),
+            retention_outbox_days=_integer(
+                values, "RETENTION_OUTBOX_DAYS", 7, minimum=1, maximum=3650
+            ),
+            retention_batch_size=_integer(
+                values, "RETENTION_BATCH_SIZE", 5000, minimum=100, maximum=10000
+            ),
+            retention_max_batches=_integer(
+                values, "RETENTION_MAX_BATCHES", 10, minimum=1, maximum=100
+            ),
         )

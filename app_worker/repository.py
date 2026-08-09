@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4, uuid5
 
@@ -59,6 +60,10 @@ class PostgresRepository:
                        to_regclass('public.alerts') AS alerts,
                        to_regclass('public.idx_alerts_delivery_lease_token')
                            AS delivery_lease_index,
+                       to_regclass('public.legal_holds') AS legal_holds,
+                       to_regclass('public.retention_vector_outbox') AS retention_vector_outbox,
+                       to_regclass('public.idx_retention_vector_outbox_pending')
+                           AS retention_vector_index,
                        (
                            SELECT COUNT(*) = 7
                            FROM information_schema.columns
@@ -80,7 +85,15 @@ class PostgresRepository:
                        ) AS baseline_schema_ready
                 """
             )
-            table_names = ("telemetry_runs", "evaluations", "alert_rules", "alerts")
+            table_names = (
+                "telemetry_runs",
+                "evaluations",
+                "alert_rules",
+                "alerts",
+                "legal_holds",
+                "retention_vector_outbox",
+                "retention_vector_index",
+            )
             if (
                 schema is None
                 or any(schema[name] is None for name in table_names)
@@ -92,6 +105,250 @@ class PostgresRepository:
 
     async def close(self) -> None:
         await self._pool.close()
+
+    @asynccontextmanager
+    async def retention_lock(self) -> AsyncIterator[asyncpg.Connection | None]:
+        """Serialize cross-store retention and legal-hold changes across workers."""
+
+        lock_key = 42070
+        async with self._pool.acquire() as connection:
+            acquired = bool(
+                await connection.fetchval(
+                    "SELECT pg_try_advisory_lock($1::bigint)",
+                    lock_key,
+                )
+            )
+            try:
+                yield connection if acquired else None
+            finally:
+                if acquired:
+                    try:
+                        unlocked = await connection.fetchval(
+                            "SELECT pg_advisory_unlock($1::bigint)",
+                            lock_key,
+                        )
+                        if not unlocked:
+                            raise RuntimeError("PostgreSQL retention advisory lock was not owned")
+                    except BaseException:
+                        connection.terminate()
+                        raise
+
+    @staticmethod
+    async def redact_expired_telemetry(
+        connection: asyncpg.Connection,
+        *,
+        cutoff: datetime,
+        batch_size: int,
+    ) -> int:
+        rows = await connection.fetch(
+            """
+            WITH candidates AS (
+                SELECT run.id
+                FROM telemetry_runs AS run
+                WHERE run.ingested_at < $1
+                  AND run.status IN ('completed', 'failed')
+                  AND run.prompt_text <> '[retention-redacted]'
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM legal_holds AS hold
+                      WHERE hold.project_id = run.project_id
+                        AND hold.released_at IS NULL
+                        AND hold.starts_at <= run.ingested_at
+                        AND (hold.ends_at IS NULL OR hold.ends_at >= run.ingested_at)
+                  )
+                ORDER BY run.ingested_at, run.id
+                LIMIT $2
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE telemetry_runs AS run
+            SET prompt_text = '[retention-redacted]',
+                output_text = '[retention-redacted]',
+                raw_metadata = jsonb_build_object(
+                    'retention_redacted', TRUE,
+                    'redacted_at', NOW()
+                )
+            FROM candidates
+            WHERE run.id = candidates.id
+            RETURNING run.id
+            """,
+            cutoff,
+            batch_size,
+        )
+        return len(rows)
+
+    @staticmethod
+    async def purge_dispatched_outbox(
+        connection: asyncpg.Connection,
+        *,
+        cutoff: datetime,
+        batch_size: int,
+    ) -> int:
+        rows = await connection.fetch(
+            """
+            WITH candidates AS (
+                SELECT event.id
+                FROM telemetry_outbox AS event
+                JOIN telemetry_runs AS run ON run.id = event.run_id
+                WHERE event.status = 'DISPATCHED'
+                  AND event.dispatch_time < $1
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM legal_holds AS hold
+                      WHERE hold.project_id = run.project_id
+                        AND hold.released_at IS NULL
+                        AND hold.starts_at <= run.ingested_at
+                        AND (hold.ends_at IS NULL OR hold.ends_at >= run.ingested_at)
+                  )
+                ORDER BY event.dispatch_time, event.id
+                LIMIT $2
+                FOR UPDATE SKIP LOCKED
+            )
+            DELETE FROM telemetry_outbox AS event
+            USING candidates
+            WHERE event.id = candidates.id
+            RETURNING event.id
+            """,
+            cutoff,
+            batch_size,
+        )
+        return len(rows)
+
+    @staticmethod
+    async def expire_telemetry_runs(
+        connection: asyncpg.Connection,
+        *,
+        cutoff: datetime,
+        batch_size: int,
+    ) -> int:
+        async with connection.transaction():
+            rows = await connection.fetch(
+                """
+                SELECT run.id
+                FROM telemetry_runs AS run
+                WHERE run.ingested_at < $1
+                  AND run.status IN ('completed', 'failed')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM legal_holds AS hold
+                      WHERE hold.project_id = run.project_id
+                        AND hold.released_at IS NULL
+                        AND hold.starts_at <= run.ingested_at
+                        AND (hold.ends_at IS NULL OR hold.ends_at >= run.ingested_at)
+                  )
+                ORDER BY run.ingested_at, run.id
+                LIMIT $2
+                FOR UPDATE SKIP LOCKED
+                """,
+                cutoff,
+                batch_size,
+            )
+            run_ids = [row["id"] for row in rows]
+            if not run_ids:
+                return 0
+            await connection.execute(
+                """
+                INSERT INTO retention_vector_outbox (run_id)
+                SELECT candidate_id
+                FROM unnest($1::uuid[]) AS candidate(candidate_id)
+                ON CONFLICT (run_id) DO NOTHING
+                """,
+                run_ids,
+            )
+            await connection.execute(
+                "DELETE FROM telemetry_runs WHERE id = ANY($1::uuid[])",
+                run_ids,
+            )
+            return len(run_ids)
+
+    @staticmethod
+    async def pending_vector_deletions(
+        connection: asyncpg.Connection,
+        *,
+        batch_size: int,
+    ) -> list[UUID]:
+        rows = await connection.fetch(
+            """
+            SELECT run_id
+            FROM retention_vector_outbox
+            WHERE status = 'PENDING'
+              AND next_attempt_at <= NOW()
+            ORDER BY next_attempt_at, run_id
+            LIMIT $1
+            """,
+            batch_size,
+        )
+        return [row["run_id"] for row in rows]
+
+    @staticmethod
+    async def complete_vector_deletions(
+        connection: asyncpg.Connection,
+        run_ids: Sequence[UUID],
+    ) -> None:
+        if not run_ids:
+            return
+        await connection.execute(
+            """
+            UPDATE retention_vector_outbox
+            SET status = 'COMPLETED',
+                completed_at = NOW(),
+                last_error = NULL
+            WHERE run_id = ANY($1::uuid[])
+              AND status = 'PENDING'
+            """,
+            list(run_ids),
+        )
+
+    @staticmethod
+    async def fail_vector_deletions(
+        connection: asyncpg.Connection,
+        run_ids: Sequence[UUID],
+        error: str,
+    ) -> None:
+        if not run_ids:
+            return
+        await connection.execute(
+            """
+            UPDATE retention_vector_outbox
+            SET attempts = attempts + 1,
+                next_attempt_at = NOW() + (
+                    LEAST(3600, POWER(2, LEAST(attempts + 1, 10))::integer)
+                    * INTERVAL '1 second'
+                ),
+                last_error = LEFT($2, 1000)
+            WHERE run_id = ANY($1::uuid[])
+              AND status = 'PENDING'
+            """,
+            list(run_ids),
+            error,
+        )
+
+    @staticmethod
+    async def purge_completed_vector_deletions(
+        connection: asyncpg.Connection,
+        *,
+        cutoff: datetime,
+        batch_size: int,
+    ) -> int:
+        rows = await connection.fetch(
+            """
+            WITH candidates AS (
+                SELECT run_id
+                FROM retention_vector_outbox
+                WHERE status = 'COMPLETED'
+                  AND completed_at < $1
+                ORDER BY completed_at, run_id
+                LIMIT $2
+                FOR UPDATE SKIP LOCKED
+            )
+            DELETE FROM retention_vector_outbox AS item
+            USING candidates
+            WHERE item.run_id = candidates.run_id
+            RETURNING item.run_id
+            """,
+            cutoff,
+            batch_size,
+        )
+        return len(rows)
 
     @asynccontextmanager
     async def run_processing_lock(self, run_id: UUID) -> AsyncIterator[bool]:

@@ -309,3 +309,137 @@ async def test_real_session_run_lock_contends_and_releases_on_cancellation() -> 
             await asyncio.gather(owner, return_exceptions=True)
         await first.close()
         await second.close()
+
+
+@pytest.mark.asyncio
+async def test_real_retention_redacts_expires_and_honors_legal_holds() -> None:
+    database_url = _test_database_url()
+    connection = await asyncpg.connect(database_url)
+    repository = await PostgresRepository.connect(database_url, max_size=2)
+    project_id = uuid4()
+    expired_run_id = uuid4()
+    held_run_id = uuid4()
+    redacted_run_id = uuid4()
+    now = datetime.now(UTC)
+
+    try:
+        await connection.execute(
+            "INSERT INTO projects (id, name, api_key_hash) VALUES ($1, $2, $3)",
+            project_id,
+            f"retention-integration-{uuid4().hex}",
+            "b" * 64,
+        )
+        for run_id, age_days, label in (
+            (expired_run_id, 120, "expired"),
+            (held_run_id, 100, "held"),
+            (redacted_run_id, 40, "redacted"),
+        ):
+            ingested_at = now - timedelta(days=age_days)
+            await connection.execute(
+                """
+                INSERT INTO telemetry_runs (
+                    id, project_id, session_id, prompt_text, output_text,
+                    raw_metadata, status, ingested_at
+                )
+                VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, 'completed', $6)
+                """,
+                run_id,
+                project_id,
+                f"retention-{label}",
+                f"prompt-{label}",
+                f"output-{label}",
+                ingested_at,
+            )
+            await connection.execute(
+                """
+                INSERT INTO telemetry_outbox (
+                    id, run_id, event_type, payload, status,
+                    retry_count, next_attempt_at, dispatch_time
+                )
+                VALUES (
+                    $1, $2, 'TELEMETRY_INGESTED',
+                    jsonb_build_object(
+                        'event_id', ($1::uuid)::text,
+                        'run_id', ($2::uuid)::text
+                    ),
+                    'DISPATCHED', 0, $3, $3
+                )
+                """,
+                uuid4(),
+                run_id,
+                ingested_at,
+            )
+        await connection.execute(
+            """
+            INSERT INTO legal_holds (project_id, starts_at, ends_at, reason)
+            VALUES ($1, $2, $3, 'integration preservation hold')
+            """,
+            project_id,
+            now - timedelta(days=101),
+            now - timedelta(days=99),
+        )
+
+        async with repository.retention_lock() as retention_connection:
+            assert retention_connection is not None
+            redacted = await repository.redact_expired_telemetry(
+                retention_connection,
+                cutoff=now - timedelta(days=30),
+                batch_size=100,
+            )
+            purged_events = await repository.purge_dispatched_outbox(
+                retention_connection,
+                cutoff=now - timedelta(days=7),
+                batch_size=100,
+            )
+            expired = await repository.expire_telemetry_runs(
+                retention_connection,
+                cutoff=now - timedelta(days=90),
+                batch_size=100,
+            )
+            vector_ids = await repository.pending_vector_deletions(
+                retention_connection,
+                batch_size=100,
+            )
+            await repository.complete_vector_deletions(retention_connection, vector_ids)
+
+        assert redacted == 2
+        assert purged_events == 2
+        assert expired == 1
+        assert vector_ids == [expired_run_id]
+        assert await connection.fetchval(
+            "SELECT COUNT(*) FROM telemetry_runs WHERE id = $1", expired_run_id
+        ) == 0
+        held = await connection.fetchrow(
+            "SELECT prompt_text, output_text FROM telemetry_runs WHERE id = $1",
+            held_run_id,
+        )
+        assert held["prompt_text"] == "prompt-held"
+        assert held["output_text"] == "output-held"
+        assert await connection.fetchval(
+            "SELECT COUNT(*) FROM telemetry_outbox WHERE run_id = $1", held_run_id
+        ) == 1
+        redacted_row = await connection.fetchrow(
+            """
+            SELECT prompt_text, output_text,
+                   (raw_metadata->>'retention_redacted')::boolean AS retention_redacted
+            FROM telemetry_runs WHERE id = $1
+            """,
+            redacted_run_id,
+        )
+        assert redacted_row["prompt_text"] == "[retention-redacted]"
+        assert redacted_row["output_text"] == "[retention-redacted]"
+        assert redacted_row["retention_redacted"] is True
+        assert await connection.fetchval(
+            """
+            SELECT COUNT(*) FROM retention_vector_outbox
+            WHERE run_id = $1 AND status = 'COMPLETED'
+            """,
+            expired_run_id,
+        ) == 1
+    finally:
+        await connection.execute("DELETE FROM projects WHERE id = $1", project_id)
+        await connection.execute(
+            "DELETE FROM retention_vector_outbox WHERE run_id = $1", expired_run_id
+        )
+        await repository.close()
+        await connection.close()

@@ -95,3 +95,27 @@ telemetry_outbox = Table(
     Column("last_error", Text),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
+
+legal_holds = Table(
+    "legal_holds",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), nullable=False),
+    Column("starts_at", DateTime(timezone=True), nullable=False),
+    Column("ends_at", DateTime(timezone=True)),
+    Column("reason", String(500), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("released_at", DateTime(timezone=True)),
+)
+
+retention_vector_outbox = Table(
+    "retention_vector_outbox",
+    metadata,
+    Column("run_id", UUID(as_uuid=True), primary_key=True),
+    Column("status", String(20), nullable=False),
+    Column("attempts", Integer, nullable=False),
+    Column("next_attempt_at", DateTime(timezone=True), nullable=False),
+    Column("last_error", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True)),
+)

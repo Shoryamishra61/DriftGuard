@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -27,6 +28,7 @@ from app_api.health import router as health_router
 from app_api.ingest import router as ingest_router
 from app_api.outbox import OutboxDispatcher
 from app_api.qdrant import ping_qdrant, qdrant_auth_headers
+from app_api.retention import router as retention_router
 from app_api.runtime import RuntimeResources
 from app_api.valkey import create_valkey_client, ping_valkey
 from app_api.vectors import router as vectors_router
@@ -116,6 +118,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_bytes=resolved_settings.max_request_bytes,
     )
 
+    @application.middleware("http")
+    async def record_application_latency(request: Request, call_next):
+        started = time.perf_counter()
+        response = await call_next(request)
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        response.headers["Server-Timing"] = f"app;dur={elapsed_ms:.3f}"
+        return response
+
     @application.exception_handler(RequestValidationError)
     async def sanitized_validation_error(
         request: Request,
@@ -140,6 +150,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(diagnostics_router)
     application.include_router(dashboard_session_router)
     application.include_router(vectors_router)
+    application.include_router(retention_router)
     return application
 
 
