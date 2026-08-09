@@ -19,13 +19,16 @@ function routeIsAllowed(route: string, method: string) {
 function requestIsSameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
   const forwardedHost = request.headers.get("x-forwarded-host")?.split(",", 1)[0]?.trim();
-  const host = forwardedHost ?? request.headers.get("host");
+  const host = request.headers.get("host")?.trim();
   const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim();
-  const protocol = forwardedProtocol ?? request.nextUrl.protocol.replace(":", "");
-  if (!origin || !host || !protocol) return false;
+  const requestProtocol = request.nextUrl.protocol.replace(":", "");
+  if (!origin) return false;
 
   try {
-    return new URL(origin).origin === `${protocol}://${host}`;
+    const parsedOrigin = new URL(origin);
+    const hosts = new Set([host, forwardedHost].filter(Boolean));
+    const protocols = new Set([requestProtocol, forwardedProtocol].filter(Boolean));
+    return hosts.has(parsedOrigin.host) && protocols.has(parsedOrigin.protocol.replace(":", ""));
   } catch {
     return false;
   }
