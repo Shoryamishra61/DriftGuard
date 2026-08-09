@@ -100,6 +100,9 @@ Verified on 9 August 2026 against the deployed Zerops project:
 | Dashboard/API credential pair | HTTP `204` |
 | API status | HTTP `200`; PostgreSQL, Valkey, and Qdrant healthy |
 | Infrastructure Pulse | Healthy PostgreSQL, Valkey, Qdrant, and worker |
+| Live semantic path | 50 active baselines, one evaluated run, matched baseline, drift `0.75923121` |
+| Live durable routing | MUTE result persisted as `SNOOZED / SUPPRESSED`; queue returned to zero |
+| Live Qdrant state | 52 points: 50 baselines, one manifest, one evaluation |
 | Managed-store exposure | Private only |
 | Source visibility | Public GitHub repository |
 | Python verification | 189 tests passed; 4 real-PostgreSQL tests opt in locally |

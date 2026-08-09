@@ -100,6 +100,8 @@ The settled pre-deployment tree produced 188 passing default Python tests and fo
 
 The deployed project reported all six services `ACTIVE`. The public dashboard liveness endpoint, authenticated dashboard, dashboard readiness endpoint, API health, and API status returned success. Infrastructure Pulse reported healthy PostgreSQL, Valkey, Qdrant, and worker state. At one observed instant, dependency latency was approximately 8.67 ms for PostgreSQL, 8.63 ms for Valkey, 10.55 ms for Qdrant, and 7.08 ms for the worker heartbeat path. These are point observations, not percentile guarantees.
 
+Both starting workers completed the idempotent bootstrap of the same 50-record `competition-v1` baseline. A public telemetry request then returned `202 Accepted`; the worker matched baseline `5612423b-4cfc-5e0b-8d72-00803e9f79a5`, calculated cosine distance `0.75923121`, and persisted the deliberate MUTE outcome as incident status `SNOOZED` and route status `SUPPRESSED`. Qdrant reported 52 points—the 50 baselines, one manifest, and one evaluation—and Valkey queue depth returned to zero.
+
 ### 7.3 Latency interpretation
 
 A previous bounded local end-to-end exercise measured 54.491 ms to `202 Accepted`, 173.153 ms from ingestion to stored evaluation, and 75 ms worker compute time. This does not satisfy the aspirational sub-5 ms public-ingestion target and does not establish sustained throughput. Reporting the result prevents a local smoke test from being misrepresented as a production benchmark.
