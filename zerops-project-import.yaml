@@ -25,6 +25,7 @@ services:
 
   - hostname: dashboard
     type: ubuntu/nodejs@22
+    buildFromGit: https://github.com/Shoryamishra61/DriftGuard
     zeropsSetup: dashboard
     priority: 20
     enableSubdomainAccess: true
@@ -45,6 +46,7 @@ services:
 
   - hostname: api
     type: ubuntu/python@3.12
+    buildFromGit: https://github.com/Shoryamishra61/DriftGuard
     zeropsSetup: api
     priority: 20
     enableSubdomainAccess: true
@@ -68,6 +70,7 @@ services:
 
   - hostname: worker
     type: ubuntu/python@3.12
+    buildFromGit: https://github.com/Shoryamishra61/DriftGuard
     zeropsSetup: worker
     priority: 20
     enableSubdomainAccess: false
