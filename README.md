@@ -7,7 +7,8 @@ DriftGuard is a live semantic-reliability monitor for production LLM systems. It
 [**Open the live Zerops deployment**](https://dashboard-141-3000.sea1.zerops.app) · [Technical report](docs/TECHNICAL_REPORT.md) · [Load-test report](docs/LOAD_TEST_REPORT.md)
 
 [![Live on Zerops](https://img.shields.io/badge/Zerops-live-6d5dfc)](https://dashboard-141-3000.sea1.zerops.app)
-[![Release verification](https://github.com/Shoryamishra61/DriftGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Shoryamishra61/DriftGuard/actions/workflows/ci.yml)
+[![CI](https://github.com/Shoryamishra61/DriftGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Shoryamishra61/DriftGuard/actions/workflows/ci.yml)
+[![Release](https://github.com/Shoryamishra61/DriftGuard/actions/workflows/release.yml/badge.svg)](https://github.com/Shoryamishra61/DriftGuard/actions/workflows/release.yml)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776ab)](https://www.python.org/)
 [![Next.js 16](https://img.shields.io/badge/Next.js-16-111111)](https://nextjs.org/)
 
@@ -97,6 +98,24 @@ python -m pytest -q
 npm run lint
 npm run build
 ```
+
+## Releases and container packages
+
+Versioned deployments are published as three Linux/AMD64 images in GitHub Container Registry:
+
+- `ghcr.io/shoryamishra61/driftguard-dashboard`
+- `ghcr.io/shoryamishra61/driftguard-api`
+- `ghcr.io/shoryamishra61/driftguard-worker`
+
+Each `vMAJOR.MINOR.PATCH` tag must match the version in `package.json`. The release workflow reruns the complete Python and dashboard verification suites, publishes semver-tagged images with SBOM and build-provenance attestations, and only then creates the GitHub release. For example:
+
+```bash
+git tag -a v1.0.0 -m "DriftGuard v1.0.0"
+git push origin v1.0.0
+docker pull ghcr.io/shoryamishra61/driftguard-api:1.0.0
+```
+
+The API container starts the web service; run `alembic upgrade head` as a release task before serving a new schema version. Runtime credentials and dependency endpoints remain environment-only and are never baked into an image.
 
 To create a new Zerops project:
 
