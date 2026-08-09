@@ -1,6 +1,14 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   CartesianGrid,
   Line,
@@ -77,6 +85,7 @@ type AlertRecord = {
   notified_at: string | null;
   status: string;
   route_status: "PENDING" | "DELIVERED" | "SUPPRESSED" | "FAILED";
+  run_id: string;
   action_type: string;
   rule_name: string;
   drift_distance: number | null;
@@ -112,6 +121,92 @@ type ProjectionResponse = {
   limit: number;
   has_more: boolean;
 };
+
+type TourStep = {
+  target?: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  demo?: boolean;
+};
+
+type TourPosition = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  cardTop: number;
+  cardLeft: number;
+};
+
+type DemoState = "idle" | "running" | "complete" | "failed";
+
+const TOUR_STORAGE_KEY = "driftguard:guided-judging-tour:v1";
+const TOUR_RULE_NAME = "guided-judge-tour";
+const TOUR_STEPS: TourStep[] = [
+  {
+    eyebrow: "WELCOME TO DRIFTGUARD",
+    title: "A live judging flow, not a slide deck.",
+    description:
+      "This guided tour explains every production surface and safely runs one real semantic-drift evaluation. It creates only a MUTE rule, so no external provider is contacted.",
+  },
+  {
+    target: "hero",
+    eyebrow: "01 · SYSTEM PATH",
+    title: "Telemetry stays fast and durable.",
+    description:
+      "The API commits each run with its transactional outbox event before Valkey, MiniLM, Qdrant, and routing continue asynchronously.",
+  },
+  {
+    target: "metrics",
+    eyebrow: "02 · EXECUTIVE SIGNAL",
+    title: "Four numbers summarize reliability.",
+    description:
+      "Average semantic distance, evaluated volume, active incidents, and end-to-end latency are calculated by the API for the selected time window.",
+  },
+  {
+    target: "drift-chart",
+    eyebrow: "03 · SEMANTIC TREND",
+    title: "See model behavior move over time.",
+    description:
+      "The trend compares each production answer with its nearest project-owned baseline. Rule thresholds remain visible as operational boundaries.",
+  },
+  {
+    target: "pulse",
+    eyebrow: "04 · INFRASTRUCTURE PULSE",
+    title: "The monitor monitors itself.",
+    description:
+      "These are live Zerops checks for PostgreSQL, Valkey, Qdrant, and the worker—including latency, queue depth, vector count, and heartbeat.",
+  },
+  {
+    target: "vectors",
+    eyebrow: "05 · VECTOR TOPOLOGY",
+    title: "Baselines and evaluations stay tenant-safe.",
+    description:
+      "The browser receives only a bounded 2D projection. Every Qdrant search is filtered by project, point type, active baseline set, and pinned model revision.",
+  },
+  {
+    target: "incidents",
+    eyebrow: "06 · LIVE PROOF",
+    title: "Creating one real drift incident now.",
+    description:
+      "The tour is ensuring a MUTE-only demo rule, submitting labeled telemetry, and waiting for the deployed worker to persist the semantic evidence.",
+    demo: true,
+  },
+  {
+    target: "rules",
+    eyebrow: "07 · ROUTING POLICY",
+    title: "Operators control what happens next.",
+    description:
+      "Rules are project-scoped. NOTIFY sends immediately, DIGEST consolidates a UTC day, and MUTE records the incident without contacting an external destination.",
+  },
+  {
+    eyebrow: "TOUR COMPLETE",
+    title: "You just exercised the production path.",
+    description:
+      "The judging flow touched authentication, the API, PostgreSQL outbox, Valkey queue, worker embedding, Qdrant matching, and durable alert persistence. Replay it any time from the header.",
+  },
+];
 
 const endpoint = (path: string) => `/api/driftguard/${path}`;
 
@@ -156,6 +251,13 @@ export function DriftDashboard() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [projectionError, setProjectionError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [tourOpen, setTourOpen] = useState(false);
+  const [tourIndex, setTourIndex] = useState(0);
+  const [tourAutoplay, setTourAutoplay] = useState(true);
+  const [tourPosition, setTourPosition] = useState<TourPosition | null>(null);
+  const [demoState, setDemoState] = useState<DemoState>("idle");
+  const [demoMessage, setDemoMessage] = useState("Ready to run the live proof.");
+  const demoTriggered = useRef(false);
 
   const loadPulse = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -219,6 +321,71 @@ export function DriftDashboard() {
     }
   }, [searchQuery, trendWindow]);
 
+  const runJudgingDemo = useCallback(async () => {
+    setDemoState("running");
+    setDemoMessage("Preparing a safe MUTE-only routing rule…");
+    try {
+      const currentRules = await fetchJson<AlertRule[]>("alert-rules");
+      const existing = currentRules.find((rule) => rule.rule_name === TOUR_RULE_NAME);
+      const rulePayload = {
+        rule_name: TOUR_RULE_NAME,
+        threshold: 0,
+        action_type: "MUTE" as const,
+        notification_target: "Automated judging tour — no outbound delivery",
+        is_active: true,
+      };
+      if (existing) {
+        const needsRepair =
+          existing.threshold !== 0 ||
+          existing.action_type !== "MUTE" ||
+          !existing.is_active ||
+          existing.notification_target !== rulePayload.notification_target;
+        if (needsRepair) {
+          await mutateJson<AlertRule>(`alert-rules/${existing.id}`, "PUT", rulePayload);
+        }
+      } else {
+        await mutateJson<AlertRule>("alert-rules", "POST", rulePayload);
+      }
+
+      setDemoMessage("Telemetry accepted. Waiting for MiniLM and Qdrant…");
+      const accepted = await mutateJson<{ run_id: string }>("logs", "POST", {
+        session_id: `guided-tour-${Date.now()}`,
+        prompt_text: "Judge tour: verify the current DriftGuard deployment.",
+        output_text:
+          "A violet lighthouse calculates sandwiches while the production status remains completely unknown.",
+        metadata: {
+          source: "guided-judging-tour",
+          purpose: "safe-live-product-proof",
+        },
+      });
+
+      let verified: AlertRecord | undefined;
+      let verifiedItems: AlertRecord[] = [];
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 800));
+        const response = await fetchJson<{ items: AlertRecord[] }>(
+          `alerts?limit=100&q=${encodeURIComponent(TOUR_RULE_NAME)}`,
+        );
+        verifiedItems = response.items;
+        verified = response.items.find((alert) => alert.run_id === accepted.run_id);
+        if (verified) break;
+      }
+      if (!verified) throw new Error("The worker did not finish within the tour window.");
+
+      setAlertQuery(TOUR_RULE_NAME);
+      setSearchQuery(TOUR_RULE_NAME);
+      setAlerts(verifiedItems);
+      await Promise.all([loadTelemetry(), loadPulse()]);
+      setDemoState("complete");
+      setDemoMessage(
+        `Verified drift ${formatMetric(verified.drift_distance, 3)} · ${verified.status} / ${verified.route_status}`,
+      );
+    } catch (error) {
+      setDemoState("failed");
+      setDemoMessage((error as Error).message || "The live proof could not complete.");
+    }
+  }, [loadPulse, loadTelemetry]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => setSearchQuery(alertQuery.trim()), 300);
     return () => window.clearTimeout(timer);
@@ -239,6 +406,100 @@ export function DriftDashboard() {
       window.clearInterval(dataTimer);
     };
   }, [loadPulse, loadTelemetry]);
+
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(TOUR_STORAGE_KEY) === "complete") return;
+    } catch {
+      // Storage can be unavailable in hardened browser contexts; the tour still works.
+    }
+    const timer = window.setTimeout(() => setTourOpen(true), 700);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!tourOpen) return;
+    const step = TOUR_STEPS[tourIndex];
+    const target = step.target
+      ? document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`)
+      : null;
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    const updatePosition = () => {
+      if (!target) {
+        setTourPosition(null);
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      const margin = 10;
+      const cardWidth = Math.min(390, window.innerWidth - 32);
+      const cardHeight = 310;
+      const below = rect.bottom + 18;
+      const cardTop =
+        below + cardHeight <= window.innerHeight
+          ? below
+          : Math.max(16, rect.top - cardHeight - 18);
+      const cardLeft = Math.min(
+        Math.max(16, rect.left + rect.width / 2 - cardWidth / 2),
+        window.innerWidth - cardWidth - 16,
+      );
+      setTourPosition({
+        top: Math.max(8, rect.top - margin),
+        left: Math.max(8, rect.left - margin),
+        width: Math.min(window.innerWidth - 16, rect.width + margin * 2),
+        height: Math.min(window.innerHeight - 16, rect.height + margin * 2),
+        cardTop,
+        cardLeft,
+      });
+    };
+
+    const settle = window.setTimeout(updatePosition, target ? 480 : 0);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.clearTimeout(settle);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [tourIndex, tourOpen]);
+
+  useEffect(() => {
+    const step = TOUR_STEPS[tourIndex];
+    if (!tourOpen || !step.demo || demoTriggered.current) return;
+    demoTriggered.current = true;
+    void runJudgingDemo();
+  }, [runJudgingDemo, tourIndex, tourOpen]);
+
+  useEffect(() => {
+    if (!tourOpen || !tourAutoplay || tourIndex === 0) return;
+    const step = TOUR_STEPS[tourIndex];
+    if (step.demo && demoState !== "complete") return;
+    if (tourIndex === TOUR_STEPS.length - 1) return;
+    const timer = window.setTimeout(
+      () => setTourIndex((current) => Math.min(current + 1, TOUR_STEPS.length - 1)),
+      step.demo ? 3_500 : 5_500,
+    );
+    return () => window.clearTimeout(timer);
+  }, [demoState, tourAutoplay, tourIndex, tourOpen]);
+
+  const closeTour = useCallback(() => {
+    try {
+      window.localStorage.setItem(TOUR_STORAGE_KEY, "complete");
+    } catch {
+      // Closing the tour must never depend on browser storage availability.
+    }
+    setTourOpen(false);
+    setTourPosition(null);
+  }, []);
+
+  const replayTour = useCallback(() => {
+    demoTriggered.current = false;
+    setDemoState("idle");
+    setDemoMessage("Ready to run the live proof.");
+    setTourIndex(0);
+    setTourAutoplay(true);
+    setTourOpen(true);
+  }, []);
 
   const overallHealthy = useMemo(
     () => pulse && Object.values(pulse.services).every((service) => service.status === "healthy"),
@@ -265,14 +526,19 @@ export function DriftDashboard() {
             <h1>DriftGuard</h1>
           </div>
         </div>
-        <div className="liveState" aria-live="polite">
-          <span className={`liveDot ${overallHealthy ? "online" : "offline"}`} />
-          <span>{overallHealthy ? "All systems nominal" : pulse ? "System degraded" : "Connecting"}</span>
-          <small>{lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString()}` : "Awaiting first pulse"}</small>
+        <div className="topbarActions">
+          <button className="tourReplay" onClick={replayTour} type="button">
+            Guided demo
+          </button>
+          <div className="liveState" aria-live="polite">
+            <span className={`liveDot ${overallHealthy ? "online" : "offline"}`} />
+            <span>{overallHealthy ? "All systems nominal" : pulse ? "System degraded" : "Connecting"}</span>
+            <small>{lastRefresh ? `Updated ${lastRefresh.toLocaleTimeString()}` : "Awaiting first pulse"}</small>
+          </div>
         </div>
       </header>
 
-      <section className="hero">
+      <section className="hero" data-tour="hero">
         <div>
           <p className="kicker">SEMANTIC SIGNAL, WITHOUT THE LATENCY TAX</p>
           <h2>Catch silent model regressions before your users do.</h2>
@@ -296,7 +562,7 @@ export function DriftDashboard() {
         </div>
       )}
 
-      <section className="metricGrid" aria-label="Drift summary">
+      <section className="metricGrid" aria-label="Drift summary" data-tour="metrics">
         <MetricCard label="Average drift" value={formatMetric(summary?.weighted_average_drift, 3)} unit="cosine" tone="cyan" />
         <MetricCard label="Evaluated runs" value={summary?.evaluated_run_count?.toLocaleString() ?? "—"} unit={windowLabel} tone="blue" />
         <MetricCard label="Active alerts" value={summary?.active_alert_count?.toLocaleString() ?? "—"} unit="open" tone="orange" />
@@ -304,7 +570,7 @@ export function DriftDashboard() {
       </section>
 
       <section className="contentGrid">
-        <article className="panel chartPanel">
+        <article className="panel chartPanel" data-tour="drift-chart">
           <PanelHeading eyebrow="SEMANTIC DISTANCE" title={`Drift over the ${windowLabel}`} detail="Cosine distance from the nearest project baseline" />
           <div className="panelToolbar" aria-label="Trend window">
             {(["24h", "7d", "30d"] as const).map((option) => (
@@ -322,10 +588,10 @@ export function DriftDashboard() {
             {trends?.points.length ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trends.points} margin={{ top: 12, right: 8, left: -20, bottom: 0 }}>
-                  <CartesianGrid stroke="rgba(155, 177, 197, .12)" vertical={false} />
+                  <CartesianGrid stroke="rgba(89, 79, 67, .12)" vertical={false} />
                   <XAxis
                     dataKey="timestamp"
-                    tick={{ fill: "#8295a7", fontSize: 11 }}
+                    tick={{ fill: "#7b756c", fontSize: 11 }}
                     tickFormatter={(value: string) => trendWindow === "24h"
                       ? new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                       : new Date(value).toLocaleDateString([], { month: "short", day: "numeric" })}
@@ -333,18 +599,18 @@ export function DriftDashboard() {
                     axisLine={false}
                     minTickGap={42}
                   />
-                  <YAxis domain={[0, "auto"]} tick={{ fill: "#8295a7", fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={{ background: "#0c1721", border: "1px solid #263747", borderRadius: 12 }} />
+                  <YAxis domain={[0, "auto"]} tick={{ fill: "#7b756c", fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={{ background: "#fffdf8", border: "1px solid #ded6ca", borderRadius: 14, color: "#28241f" }} />
                   {trends.thresholds.map((threshold, index) => (
                     <ReferenceLine
                       key={`${threshold.rule_name}-${threshold.action_type}-${threshold.threshold}`}
                       y={threshold.threshold}
-                      stroke={index % 2 ? "#ff6b61" : "#f3ad42"}
+                      stroke={index % 2 ? "#b85c4b" : "#b77a32"}
                       strokeDasharray="5 5"
-                      label={{ value: threshold.rule_name, fill: index % 2 ? "#ff6b61" : "#f3ad42", fontSize: 10 }}
+                      label={{ value: threshold.rule_name, fill: index % 2 ? "#b85c4b" : "#b77a32", fontSize: 10 }}
                     />
                   ))}
-                  <Line type="monotone" dataKey="average_drift" stroke="#43e5ca" strokeWidth={3} dot={false} activeDot={{ r: 5, fill: "#43e5ca" }} />
+                  <Line type="monotone" dataKey="average_drift" stroke="#5d826d" strokeWidth={3} dot={false} activeDot={{ r: 5, fill: "#5d826d" }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -353,7 +619,7 @@ export function DriftDashboard() {
           </div>
         </article>
 
-        <article className="panel pulsePanel">
+        <article className="panel pulsePanel" data-tour="pulse">
           <PanelHeading eyebrow="INFRASTRUCTURE PULSE" title="Private network health" detail="Live checks every two seconds" />
           <div className="serviceList">
             {services.map(([key, label, service]) => (
@@ -381,12 +647,12 @@ export function DriftDashboard() {
           {trends?.points.some((point) => point.p95_latency_ms !== null) ? (
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 12, right: 24, left: 2, bottom: 8 }}>
-                <CartesianGrid stroke="rgba(155, 177, 197, .12)" />
+                <CartesianGrid stroke="rgba(89, 79, 67, .12)" />
                 <XAxis
                   type="number"
                   dataKey="average_drift"
                   name="Average drift"
-                  tick={{ fill: "#8295a7", fontSize: 11 }}
+                  tick={{ fill: "#7b756c", fontSize: 11 }}
                   tickLine={false}
                 />
                 <YAxis
@@ -394,17 +660,17 @@ export function DriftDashboard() {
                   dataKey="p95_latency_ms"
                   name="P95 latency"
                   unit=" ms"
-                  tick={{ fill: "#8295a7", fontSize: 11 }}
+                  tick={{ fill: "#7b756c", fontSize: 11 }}
                   tickLine={false}
                 />
                 <ZAxis type="number" dataKey="evaluations" range={[45, 340]} name="Evaluations" />
                 <Tooltip
                   cursor={{ strokeDasharray: "4 4" }}
-                  contentStyle={{ background: "#0c1721", border: "1px solid #263747", borderRadius: 12 }}
+                  contentStyle={{ background: "#fffdf8", border: "1px solid #ded6ca", borderRadius: 14, color: "#28241f" }}
                 />
                 <Scatter
                   data={trends.points.filter((point) => point.p95_latency_ms !== null)}
-                  fill="#65a8ff"
+                  fill="#6685a4"
                 />
               </ScatterChart>
             </ResponsiveContainer>
@@ -414,7 +680,7 @@ export function DriftDashboard() {
         </div>
       </section>
 
-      <section className="panel scatterPanel">
+      <section className="panel scatterPanel" data-tour="vectors">
         <PanelHeading
           eyebrow="VECTOR TOPOLOGY"
           title="Project-isolated semantic clusters"
@@ -428,33 +694,33 @@ export function DriftDashboard() {
           {projection?.points.length ? (
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 12, right: 24, left: 2, bottom: 8 }}>
-                <CartesianGrid stroke="rgba(155, 177, 197, .12)" />
+                <CartesianGrid stroke="rgba(89, 79, 67, .12)" />
                 <XAxis
                   dataKey="x"
                   name="Projection X"
                   type="number"
-                  tick={{ fill: "#8295a7", fontSize: 11 }}
+                  tick={{ fill: "#7b756c", fontSize: 11 }}
                   tickLine={false}
                 />
                 <YAxis
                   dataKey="y"
                   name="Projection Y"
                   type="number"
-                  tick={{ fill: "#8295a7", fontSize: 11 }}
+                  tick={{ fill: "#7b756c", fontSize: 11 }}
                   tickLine={false}
                 />
                 <Tooltip
                   cursor={{ strokeDasharray: "4 4" }}
-                  contentStyle={{ background: "#0c1721", border: "1px solid #263747", borderRadius: 12 }}
+                  contentStyle={{ background: "#fffdf8", border: "1px solid #ded6ca", borderRadius: 14, color: "#28241f" }}
                 />
                 <Scatter
                   data={projection.points.filter((point) => point.point_type === "baseline")}
-                  fill="#43e5ca"
+                  fill="#5d826d"
                   name="Baseline"
                 />
                 <Scatter
                   data={projection.points.filter((point) => point.point_type === "evaluation")}
-                  fill="#ff6b61"
+                  fill="#bc674f"
                   name="Evaluation"
                 />
               </ScatterChart>
@@ -466,7 +732,7 @@ export function DriftDashboard() {
       </section>
 
       <section className="contentGrid lowerGrid">
-        <article className="panel alertPanel">
+        <article className="panel alertPanel" data-tour="incidents">
           <PanelHeading eyebrow="INCIDENT STREAM" title="Recent drift alerts" detail={`${alerts.length} verified records`} />
           <div className="feedToolbar">
             <label htmlFor="alert-search">Search incidents</label>
@@ -503,7 +769,7 @@ export function DriftDashboard() {
           </div>
         </article>
 
-        <article className="panel rulesPanel">
+        <article className="panel rulesPanel" data-tour="rules">
           <PanelHeading eyebrow="ROUTING POLICY" title="Alert behavior" detail="Project-scoped threshold actions" />
           <div className="ruleList">
             <RuleEditor onSaved={() => void loadTelemetry()} />
@@ -518,6 +784,26 @@ export function DriftDashboard() {
         <span>DRIFTGUARD / ZEROPS PRIVATE VXLAN</span>
         <span>384-D COSINE · TRANSACTIONAL OUTBOX · AT-LEAST-ONCE DELIVERY</span>
       </footer>
+      {tourOpen && (
+        <GuidedTour
+          autoplay={tourAutoplay}
+          demoMessage={demoMessage}
+          demoState={demoState}
+          index={tourIndex}
+          onAutoplayChange={setTourAutoplay}
+          onBack={() => setTourIndex((current) => Math.max(0, current - 1))}
+          onClose={closeTour}
+          onNext={() => {
+            if (tourIndex === TOUR_STEPS.length - 1) closeTour();
+            else setTourIndex((current) => Math.min(current + 1, TOUR_STEPS.length - 1));
+          }}
+          onRetry={() => {
+            demoTriggered.current = true;
+            void runJudgingDemo();
+          }}
+          position={tourPosition}
+        />
+      )}
     </main>
   );
 }
@@ -543,6 +829,91 @@ function PanelHeading({ eyebrow, title, detail }: { eyebrow: string; title: stri
 
 function EmptyState({ label }: { label: string }) {
   return <div className="emptyState"><span className="emptyPulse" />{label}</div>;
+}
+
+function GuidedTour({
+  autoplay,
+  demoMessage,
+  demoState,
+  index,
+  onAutoplayChange,
+  onBack,
+  onClose,
+  onNext,
+  onRetry,
+  position,
+}: {
+  autoplay: boolean;
+  demoMessage: string;
+  demoState: DemoState;
+  index: number;
+  onAutoplayChange: (value: boolean) => void;
+  onBack: () => void;
+  onClose: () => void;
+  onNext: () => void;
+  onRetry: () => void;
+  position: TourPosition | null;
+}) {
+  const step = TOUR_STEPS[index];
+  const isFirst = index === 0;
+  const isLast = index === TOUR_STEPS.length - 1;
+  const waitingForDemo = Boolean(step.demo && demoState === "running");
+  const spotlightStyle = position
+    ? ({
+        top: position.top,
+        left: position.left,
+        width: position.width,
+        height: position.height,
+      } satisfies CSSProperties)
+    : undefined;
+  const cardStyle = position
+    ? ({ top: position.cardTop, left: position.cardLeft } satisfies CSSProperties)
+    : undefined;
+
+  return (
+    <div className="tourLayer" aria-live="polite">
+      <div className={`tourScrim ${position ? "spotlightMode" : ""}`} />
+      {position && <div className="tourSpotlight" style={spotlightStyle} />}
+      <aside
+        aria-label="DriftGuard guided judging tour"
+        aria-modal="true"
+        className={`tourCard ${position ? "anchored" : "centered"}`}
+        role="dialog"
+        style={cardStyle}
+      >
+        <div className="tourTopline">
+          <span>{step.eyebrow}</span>
+          <button aria-label="Close guided tour" onClick={onClose} type="button">×</button>
+        </div>
+        <div className="tourProgress" aria-label={`Step ${index + 1} of ${TOUR_STEPS.length}`}>
+          {TOUR_STEPS.map((item, stepIndex) => (
+            <i className={stepIndex <= index ? "complete" : ""} key={item.eyebrow} />
+          ))}
+        </div>
+        <h2>{step.title}</h2>
+        <p>{step.description}</p>
+        {step.demo && (
+          <div className={`tourDemoState ${demoState}`} role="status">
+            <span aria-hidden="true">{demoState === "complete" ? "✓" : demoState === "failed" ? "!" : "•"}</span>
+            <div><strong>{demoState === "complete" ? "Live proof verified" : demoState === "failed" ? "Proof needs attention" : "Production flow running"}</strong><small>{demoMessage}</small></div>
+            {demoState === "failed" && <button onClick={onRetry} type="button">Retry</button>}
+          </div>
+        )}
+        <div className="tourControls">
+          {!isFirst && !isLast ? (
+            <label><input checked={autoplay} onChange={(event) => onAutoplayChange(event.target.checked)} type="checkbox" />Autoplay</label>
+          ) : <span />}
+          <div>
+            {!isFirst && <button className="tourSecondary" onClick={onBack} type="button">Back</button>}
+            <button className="tourPrimary" disabled={waitingForDemo} onClick={onNext} type="button">
+              {isFirst ? "Start guided demo" : isLast ? "Finish" : waitingForDemo ? "Running live proof…" : "Next"}
+            </button>
+          </div>
+        </div>
+        <small className="tourCounter">{String(index + 1).padStart(2, "0")} / {String(TOUR_STEPS.length).padStart(2, "0")}</small>
+      </aside>
+    </div>
+  );
 }
 
 function RuleEditor({ rule, onSaved }: { rule?: AlertRule; onSaved: () => void }) {
@@ -667,7 +1038,7 @@ function ServiceSparkline({ samples, status }: { samples: PulseSample[]; status?
             dataKey="latency_ms"
             dot={false}
             isAnimationActive={false}
-            stroke={status === "healthy" ? "#43e5ca" : status === "degraded" ? "#f3ad42" : "#ff6b61"}
+            stroke={status === "healthy" ? "#5d826d" : status === "degraded" ? "#b77a32" : "#b85c4b"}
             strokeWidth={1.5}
             type="monotone"
           />

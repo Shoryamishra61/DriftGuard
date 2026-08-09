@@ -19,6 +19,12 @@ Production LLM endpoints can continue returning successful HTTP responses while 
 
 The system is deployed as six decoupled Zerops services. Public ingress is limited to the dashboard and API. PostgreSQL, Valkey, Qdrant, and the worker remain on the private Zerops network.
 
+## Guided judging experience
+
+The authenticated dashboard uses a warm, light control-plane interface designed for a clear first evaluation. On a browser's first successful sign-in, a nine-step guided tour explains the production path, metrics, drift trend, Infrastructure Pulse, vector projection, incident evidence, and routing controls.
+
+The tour also proves the product rather than merely describing it: after the visitor starts the flow, it idempotently ensures a project-scoped `MUTE` rule, submits labeled telemetry through the authenticated dashboard proxy, waits for the real worker and Qdrant evaluation, and focuses the resulting incident in the stream. This automation never sends Slack, Discord, PagerDuty, webhook, or email traffic. The completion state is stored only in that browser, and **Guided demo** in the header can replay the flow at any time.
+
 ## Why it matters
 
 Traditional uptime monitoring answers “did the endpoint respond?” DriftGuard answers a harder question: “did the answer remain semantically aligned with what production considers acceptable?”

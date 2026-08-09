@@ -12,7 +12,7 @@ const GET_ROUTES = new Set([
 
 function routeIsAllowed(route: string, method: string) {
   if (method === "GET") return GET_ROUTES.has(route);
-  if (method === "POST") return route === "alert-rules";
+  if (method === "POST") return route === "alert-rules" || route === "logs";
   return method === "PUT" && /^alert-rules\/[1-9]\d*$/.test(route);
 }
 
