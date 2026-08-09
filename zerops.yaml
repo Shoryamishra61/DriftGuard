@@ -14,7 +14,6 @@ zerops:
         - public
       cache:
         - node_modules
-        - .next/cache
     deploy:
       temporaryShutdown: false
       readinessCheck:
